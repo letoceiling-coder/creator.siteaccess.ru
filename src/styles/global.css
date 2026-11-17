@@ -1,0 +1,200 @@
+@import 'tailwindcss';
+@import './studio.css';
+
+/*
+  Helios. Runtime tokens live on :root and [data-theme="dark"].
+  @theme inline exposes them as Tailwind utilities. Components do not carry a second palette.
+*/
+:root {
+  color-scheme: light;
+  --canvas: #e4e7ee;
+  --canvas-sunken: #d4d8e2;
+  --canvas-raised: #f7f4ee;
+  --canvas-overlay: #fffcfa;
+  --ink: #14161c;
+  --ink-muted: #454c5c;
+  --line: #c9ced8;
+  --line-strong: #5a6476;
+  --accent: #8a4b09;
+  --accent-fill: #8c5309;
+  --accent-ink: #fff8ee;
+  --danger: #9f1239;
+  --danger-fill: #be123c;
+  --danger-ink: #fff1f3;
+  --success: #3f6212;
+  --success-fill: #3f6f1f;
+  --success-ink: #f3fbe9;
+  --focus: #8a4b09;
+  --wash: color-mix(in srgb, var(--ink) 8%, transparent);
+  --shadow-raised-value: 0 1px 2px rgb(20 22 28 / 0.05), 0 18px 40px rgb(20 22 28 / 0.07);
+  --shadow-overlay-value: 0 24px 70px rgb(12 14 20 / 0.22);
+  --duration-fast: 140ms;
+  --duration-base: 220ms;
+  --duration-slow: 360ms;
+  --ease-standard-value: cubic-bezier(0.2, 0, 0, 1);
+  --ease-enter-value: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-exit-value: cubic-bezier(0.4, 0, 1, 1);
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+  --canvas: #0c0e13;
+  --canvas-sunken: #08090d;
+  --canvas-raised: #161a22;
+  --canvas-overlay: #202633;
+  --ink: #f4f1ea;
+  --ink-muted: #b7b1a6;
+  --line: #2c3342;
+  --line-strong: #8d97ab;
+  --accent: #f0c27a;
+  --accent-fill: #c9842a;
+  --accent-ink: #1a1408;
+  --danger: #ffb4c2;
+  --danger-fill: #be123c;
+  --danger-ink: #fff1f3;
+  --success: #cde7b0;
+  --success-fill: #3f6f1f;
+  --success-ink: #f3fbe9;
+  --focus: #f0c27a;
+  --wash: color-mix(in srgb, var(--ink) 8%, transparent);
+  --shadow-raised-value: 0 1px 0 rgb(255 255 255 / 0.04), 0 18px 44px rgb(0 0 0 / 0.36);
+  --shadow-overlay-value: 0 28px 80px rgb(0 0 0 / 0.5);
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-canvas-sunken: var(--canvas-sunken);
+  --color-canvas-raised: var(--canvas-raised);
+  --color-canvas-overlay: var(--canvas-overlay);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-accent: var(--accent);
+  --color-accent-fill: var(--accent-fill);
+  --color-accent-ink: var(--accent-ink);
+  --color-danger: var(--danger);
+  --color-danger-fill: var(--danger-fill);
+  --color-danger-ink: var(--danger-ink);
+  --color-success: var(--success);
+  --color-success-fill: var(--success-fill);
+  --color-success-ink: var(--success-ink);
+  --color-focus: var(--focus);
+  --color-wash: var(--wash);
+  --font-sans: 'Outfit Variable', 'Segoe UI', sans-serif;
+  --font-display: 'Syne Variable', 'Segoe UI', sans-serif;
+  --text-caption: 0.8125rem;
+  --text-caption--line-height: 1.45;
+  --text-body: 1rem;
+  --text-body--line-height: 1.5;
+  --text-title: clamp(1.35rem, 1.15rem + 0.6vw, 2rem);
+  --text-title--line-height: 1.15;
+  --text-title--letter-spacing: -0.03em;
+  --text-title--font-weight: 600;
+  --text-display: clamp(2.75rem, 1.5rem + 3.2vw, 5rem);
+  --text-display--line-height: 0.92;
+  --text-display--letter-spacing: -0.045em;
+  --text-display--font-weight: 600;
+  --tracking-label: 0.08em;
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1.25rem;
+  --shadow-raised: var(--shadow-raised-value);
+  --shadow-overlay: var(--shadow-overlay-value);
+  --ease-standard: var(--ease-standard-value);
+  --ease-enter: var(--ease-enter-value);
+  --ease-exit: var(--ease-exit-value);
+}
+
+@utility transition-studio {
+  transition-property: color, background-color, border-color, box-shadow, opacity, transform;
+  transition-duration: var(--duration-fast);
+  transition-timing-function: var(--ease-standard-value);
+}
+
+@utility surface-glass {
+  background: color-mix(in srgb, var(--canvas-overlay) 92%, transparent);
+  backdrop-filter: blur(18px);
+}
+
+html {
+  background: var(--canvas);
+  scroll-padding-top: 6.5rem;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1.5;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--accent-fill);
+  color: var(--accent-ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+
+.studio-dialog {
+  width: min(100% - 1.5rem, 26rem);
+  max-height: min(85dvh, 40rem);
+  margin: auto;
+  padding: 0;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  clip-path: polygon(0 0, calc(100% - 20px) 0, 100% 20px, 100% 100%, 20px 100%, 0 calc(100% - 20px));
+  background: var(--canvas-overlay);
+  color: var(--ink);
+  box-shadow: var(--shadow-overlay-value);
+}
+
+.studio-dialog::backdrop {
+  background: rgb(8 9 13 / 0.72);
+}
+
+.studio-dialog[open] {
+  animation: studio-rise var(--duration-base) var(--ease-enter-value);
+}
+
+@keyframes studio-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 639px) {
+  .studio-dialog {
+    width: 100%;
+    max-height: min(92dvh, 40rem);
+    margin: auto 0 0;
+    border-bottom: 0;
+    border-radius: 0;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

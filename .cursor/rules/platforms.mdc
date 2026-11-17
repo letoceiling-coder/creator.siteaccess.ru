@@ -1,0 +1,10 @@
+---
+description: Адаптеры Telegram, MAX и браузера
+globs: src/features/platform/**/*, src/pages/**/*.tsx, src/components/layout/**/*.tsx
+alwaysApply: false
+---
+
+- Платформу определяет `readPlatformSnapshot`. Реальный `window.Telegram.WebApp` важнее `window.WebApp`, маршрут `/telegram` или `/max` — только предпросмотр без SDK.
+- UI не вызывает `window.Telegram` и `window.WebApp` напрямую. Только методы адаптера.
+- SDK на этом этапе не подключать. `signalReady` и `close` остаются пустыми, если хоста нет.
+- Safe area в вёрстке — `env(safe-area-inset-*)` и `viewport-fit=cover`. Нижнюю зону мини-приложения резервировать через `reservesNavigationInset`, не копировать оболочку.

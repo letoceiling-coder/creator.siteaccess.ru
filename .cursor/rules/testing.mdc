@@ -1,0 +1,10 @@
+---
+description: Проверки TypeScript, Oxlint, Vitest и Playwright
+globs: src/**/*.test.ts, src/**/*.test.tsx, e2e/**/*.ts, playwright.config.ts, vite.config.ts
+alwaysApply: false
+---
+
+- Логику платформы, токены и контракты форм покрывать Vitest. Сценарии маршрутов, переполнения, клавиатуры и axe — Playwright.
+- Тест проверяет поведение, а не снимок всего дерева. Не отключать правило axe, чтобы тест стал зелёным: исправлять интерфейс.
+- `npm run test` не запускает e2e. Для e2e нужен установленный Chromium: `npx playwright install chromium`, затем `npm run test:e2e`.
+- Успешная сборка сама по себе не считается проверкой интерфейса.

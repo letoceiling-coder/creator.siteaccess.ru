@@ -1,0 +1,11 @@
+---
+description: Токены интерфейса, доступность и адаптив компонентов
+globs: src/**/*.tsx, src/styles/**/*.css
+alwaysApply: false
+---
+
+- Стили только токенами Tailwind из `src/styles/global.css`: `bg-canvas`, `text-ink`, `border-line-strong`, `font-display`, `text-body`, `rounded-md`, `shadow-raised`.
+- Интерактивный элемент не ниже 44px по высоте. На 320px нет горизонтального скролла страницы.
+- Управляющий элемент — `button`, `a`, `input` или `dialog`, с видимым `:focus-visible`. Иконка без текста получает имя на элементе и `aria-hidden` на самой иконке.
+- Модалка — нативный `dialog`. Ошибки форм связаны с полем через `aria-describedby`.
+- Тема меняется только переменными `[data-theme]`. Не добавлять вторую палитру классами `dark:`.

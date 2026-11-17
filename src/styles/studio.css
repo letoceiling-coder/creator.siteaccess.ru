@@ -1,0 +1,222 @@
+/*
+  Studio language «Кадр». Только форма и движение: цвет берётся из токенов Helios.
+  Фаски вместо скруглений, угловые метки видоискателя, перфорация плёнки, свет вольфрама.
+*/
+:root {
+  --cut: 14px;
+  --cut-sm: 9px;
+  --glow: color-mix(in srgb, var(--accent-fill) 55%, transparent);
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.55'/%3E%3C/svg%3E");
+}
+
+/* Фаска: срезаны правый верх и левый низ. */
+@utility chamfer {
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--cut)) 0,
+    100% var(--cut),
+    100% 100%,
+    var(--cut) 100%,
+    0 calc(100% - var(--cut))
+  );
+}
+
+@utility chamfer-sm {
+  --cut: var(--cut-sm);
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--cut)) 0,
+    100% var(--cut),
+    100% 100%,
+    var(--cut) 100%,
+    0 calc(100% - var(--cut))
+  );
+}
+
+/* Зерно плёнки поверх поверхности. */
+@utility grain {
+  position: relative;
+  isolation: isolate;
+}
+.grain::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background-image: var(--grain);
+  opacity: 0.06;
+  mix-blend-mode: overlay;
+}
+
+/* Угловые метки видоискателя. */
+@utility ticks {
+  position: relative;
+}
+.ticks::before,
+.ticks::after {
+  content: '';
+  position: absolute;
+  inline-size: 14px;
+  block-size: 14px;
+  pointer-events: none;
+  border: 0 solid var(--accent);
+  transition:
+    inline-size var(--duration-base) var(--ease-enter-value),
+    block-size var(--duration-base) var(--ease-enter-value),
+    opacity var(--duration-base);
+  z-index: 2;
+}
+.ticks::before {
+  inset-block-start: 8px;
+  inset-inline-start: 8px;
+  border-block-start-width: 2px;
+  border-inline-start-width: 2px;
+}
+.ticks::after {
+  inset-block-end: 8px;
+  inset-inline-end: 8px;
+  border-block-end-width: 2px;
+  border-inline-end-width: 2px;
+}
+.ticks:hover::before,
+.ticks:hover::after,
+.ticks[data-active='true']::before,
+.ticks[data-active='true']::after {
+  inline-size: 26px;
+  block-size: 26px;
+}
+
+/* Перфорация: ряд прорезей по краю. */
+.perf {
+  background-image: radial-gradient(
+    circle at 50% 50%,
+    var(--canvas) 0 2.5px,
+    transparent 3px
+  );
+  background-size: 100% 14px;
+  background-repeat: repeat-y;
+  background-position: center 4px;
+}
+
+/* Свет по кнопке: узкая полоса идёт слева направо. */
+.sweep {
+  position: relative;
+  overflow: hidden;
+}
+.sweep::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inline-size: 38%;
+  inset-inline-start: -50%;
+  background: linear-gradient(100deg, transparent, rgb(255 255 255 / 0.38), transparent);
+  transform: skewX(-18deg);
+  animation: studio-sweep 3.6s var(--ease-standard-value) infinite;
+  pointer-events: none;
+}
+@keyframes studio-sweep {
+  0%,
+  55% {
+    inset-inline-start: -50%;
+  }
+  100% {
+    inset-inline-start: 130%;
+  }
+}
+
+/* Дыхание вольфрамовой нити. */
+@keyframes studio-breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 var(--glow);
+  }
+  50% {
+    box-shadow: 0 0 22px 2px var(--glow);
+  }
+}
+.breathe {
+  animation: studio-breathe 3.2s ease-in-out infinite;
+}
+
+/* Проявка снимка: из тёмного и размытого в чёткий. */
+@keyframes studio-develop {
+  0% {
+    filter: brightness(0.15) contrast(1.6) blur(14px) sepia(0.8);
+    transform: scale(1.06);
+  }
+  60% {
+    filter: brightness(0.8) contrast(1.2) blur(3px) sepia(0.35);
+  }
+  100% {
+    filter: none;
+    transform: scale(1);
+  }
+}
+.develop {
+  animation: studio-develop 1.4s var(--ease-enter-value) both;
+}
+
+/* Диафрагма-загрузчик. */
+@keyframes studio-iris {
+  0%,
+  100% {
+    transform: rotate(0deg) scale(1);
+  }
+  50% {
+    transform: rotate(60deg) scale(0.78);
+  }
+}
+.iris-blades {
+  animation: studio-iris 1.8s var(--ease-standard-value) infinite;
+  transform-origin: 50% 50%;
+}
+
+/* Бегущая плёнка. */
+@keyframes studio-film {
+  to {
+    background-position-x: -28px;
+  }
+}
+.film-run {
+  background-image: repeating-linear-gradient(
+    90deg,
+    transparent 0 12px,
+    color-mix(in srgb, var(--accent-ink) 28%, transparent) 12px 14px
+  );
+  background-size: 28px 100%;
+  animation: studio-film 0.7s linear infinite;
+}
+
+@keyframes studio-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+.hide-scroll {
+  scrollbar-width: none;
+}
+.hide-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sweep::before,
+  .breathe,
+  .iris-blades,
+  .film-run {
+    animation: none !important;
+  }
+}
+
+/* clip-path срезает внешний контур фокуса, поэтому кольцо уходит внутрь. */
+.chamfer:focus-visible,
+.chamfer-sm:focus-visible,
+.chamfer :focus-visible {
+  outline-offset: -4px;
+}
