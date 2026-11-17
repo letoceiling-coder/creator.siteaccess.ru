@@ -277,7 +277,16 @@ export function wanVideoWorkflow({
  * Qwen-Image-Edit 2511 + Lightning 4 шага: человек с загруженного фото переносится в сцену.
  * `images` — имена до трёх загруженных файлов (LoadImage); первое задаёт размер результата.
  */
-export function qwenEditWorkflow({ images, prompt, negative = '', seed, prefix, width, height }) {
+export function qwenEditWorkflow({
+  images,
+  prompt,
+  negative = '',
+  seed,
+  prefix,
+  width,
+  height,
+  upscale,
+}) {
   const load = {}
   const encode = { clip: ['2', 0], prompt, vae: ['3', 0] }
   const negEncode = { clip: ['2', 0], prompt: negative, vae: ['3', 0] }
@@ -342,6 +351,18 @@ export function qwenEditWorkflow({ images, prompt, negative = '', seed, prefix, 
       },
     },
     11: { class_type: 'VAEDecode', inputs: { samples: ['10', 0], vae: ['3', 0] } },
-    12: { class_type: 'SaveImage', inputs: { images: ['11', 0], filename_prefix: prefix } },
+    ...(upscale
+      ? {
+          13: { class_type: 'UpscaleModelLoader', inputs: { model_name: upscale } },
+          14: {
+            class_type: 'ImageUpscaleWithModel',
+            inputs: { upscale_model: ['13', 0], image: ['11', 0] },
+          },
+        }
+      : {}),
+    12: {
+      class_type: 'SaveImage',
+      inputs: { images: [upscale ? '14' : '11', 0], filename_prefix: prefix },
+    },
   }
 }

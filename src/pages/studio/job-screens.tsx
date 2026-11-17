@@ -515,6 +515,11 @@ export function JobScreen({
                       style={{ animationDelay: `${i * 0.12}s` }}
                       className="develop aspect-[3/4] size-full object-cover"
                     />
+                    {r.label ? (
+                      <figcaption className="tracking-label absolute top-2 left-2 bg-black/50 px-2 py-1 text-[11px] text-white uppercase backdrop-blur-sm">
+                        {r.label}
+                      </figcaption>
+                    ) : null}
                     <a
                       href={r.download}
                       download={`kadr-${i + 1}.jpg`}

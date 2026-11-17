@@ -68,7 +68,7 @@ export function startWorker({ q, config, log }) {
     return names
   }
 
-  async function edit(job, images, shot, index) {
+  async function edit(job, images, shot, index, upscale) {
     const files = await withRetry(() =>
       runWorkflow(
         qwenEditWorkflow({
@@ -79,6 +79,7 @@ export function startWorker({ q, config, log }) {
           width: shot.width,
           height: shot.height,
           prefix: `creator-user/${job.id}-${index}`,
+          upscale,
         }),
         { front: true, timeoutMs: 900_000 },
       ),
@@ -92,7 +93,7 @@ export function startWorker({ q, config, log }) {
     for (const [i, shot] of plan.entries()) {
       checkCancel(job.id)
       const png = join(out, `${i + 1}.png`)
-      writeFileSync(png, await edit(job, images, shot, i))
+      writeFileSync(png, await edit(job, images, shot, i, 'RealESRGAN_x2plus.pth'))
       await toJpeg(png, join(out, `${i + 1}.jpg`))
       await toWebp(png, join(out, `${i + 1}.webp`), 720)
       rmSync(png)
@@ -100,8 +101,10 @@ export function startWorker({ q, config, log }) {
         type: 'photo',
         src: `/media/jobs/${job.id}/${i + 1}.webp`,
         download: `/media/jobs/${job.id}/${i + 1}.jpg`,
-        width: shot.width,
-        height: shot.height,
+        label: shot.name,
+        // В JPEG для скачивания — апскейл ×2.
+        width: shot.width * 2,
+        height: shot.height * 2,
       })
       q.progress.run(i + 1, JSON.stringify(results), job.id)
     }

@@ -8,6 +8,7 @@ const resultSchema = z.object({
   src: z.string(),
   download: z.string(),
   poster: z.string().optional(),
+  label: z.string().optional(),
   width: z.number(),
   height: z.number(),
 })
