@@ -1,9 +1,10 @@
 import { Music2 } from 'lucide-react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { ActionBar } from '@/components/studio/action-bar.tsx'
 import { ApertureTabs } from '@/components/studio/aperture-tabs.tsx'
 import { PosterCard } from '@/components/studio/poster-card.tsx'
+import { VideoPlayer } from '@/components/studio/video-player.tsx'
 import { StudioButton } from '@/components/studio/studio-button.tsx'
 import {
   videoCategories,
@@ -101,68 +102,6 @@ function Equalizer({ bpm }: { bpm: number }) {
   )
 }
 
-function StoryboardPreview({ template }: { template: VideoTemplate }) {
-  const reduce = useReducedMotion()
-  const [shot, setShot] = useState(0)
-  const count = template.shots.length
-  const slice = (template.seconds * 1000) / count
-
-  useEffect(() => {
-    if (reduce) return
-    const timer = window.setTimeout(() => setShot((s) => (s + 1) % count), Math.min(slice, 3200))
-    return () => window.clearTimeout(timer)
-  }, [shot, reduce, count, slice])
-
-  const frame = template.frames[shot] ?? template.cover
-  return (
-    <div className="chamfer grain relative aspect-[4/5] overflow-hidden md:aspect-[3/4]">
-      <AnimatePresence mode="popLayout">
-        <motion.img
-          key={`${template.id}-${shot}`}
-          src={frame}
-          alt=""
-          initial={{ opacity: 0, scale: 1.12 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-          className="absolute inset-0 size-full object-cover"
-        />
-      </AnimatePresence>
-      <span className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30" />
-      <span className="tracking-label absolute top-3 left-3 bg-black/45 px-2 py-1 text-[11px] text-white/90 uppercase backdrop-blur-sm">
-        Раскадровка · не готовый ролик
-      </span>
-      <div className="absolute inset-x-0 bottom-0 grid gap-3 p-4 text-white">
-        <p className="text-body min-h-12" aria-live="polite">
-          <span className="text-accent mr-2 tabular-nums">0{shot + 1}</span>
-          {template.shots[shot]}
-        </p>
-        <div className="grid grid-cols-3 gap-1" role="group" aria-label="План">
-          {template.shots.map((name, i) => (
-            <button
-              key={name}
-              type="button"
-              onClick={() => setShot(i)}
-              aria-label={`План ${i + 1}: ${name}`}
-              aria-pressed={i === shot}
-              className="grid min-h-11 items-center"
-            >
-              <span className="relative block h-1 overflow-hidden bg-white/25">
-                <motion.span
-                  className="bg-accent-fill absolute inset-0 origin-left"
-                  initial={false}
-                  animate={{ scaleX: i <= shot ? 1 : 0 }}
-                  transition={{ duration: 0.36 }}
-                />
-              </span>
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
-
 export function VideoDetailScreen({
   template,
   onCatalog,
@@ -173,7 +112,7 @@ export function VideoDetailScreen({
   const category = videoCategories.find((c) => c.id === template.category)?.label
   return (
     <div className="grid gap-8 px-4 pt-4 md:grid-cols-2 md:items-start md:gap-12 md:px-6 md:pt-6">
-      <StoryboardPreview template={template} />
+      <VideoPlayer template={template} />
       <div className="grid gap-8">
         <div className="grid gap-2">
           <span className="text-caption tracking-label text-accent uppercase">{category}</span>
@@ -211,8 +150,8 @@ export function VideoDetailScreen({
             <Equalizer bpm={template.music.bpm} />
           </div>
           <p className="text-caption text-ink-muted">
-            Трек подберётся по этому описанию из лицензионной библиотеки. Звук в превью пока не
-            воспроизводится.
+            В превью играет синтезированный набросок настроения. Финальный трек подберётся по этому
+            описанию из лицензионной библиотеки.
           </p>
         </div>
 
