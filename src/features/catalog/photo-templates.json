@@ -1,0 +1,600 @@
+{
+  "categories": [
+    {
+      "id": "trend",
+      "label": "Тренды"
+    },
+    {
+      "id": "winter",
+      "label": "Зима"
+    },
+    {
+      "id": "autumn",
+      "label": "Осень"
+    },
+    {
+      "id": "summer",
+      "label": "Весна и лето"
+    },
+    {
+      "id": "studio",
+      "label": "Студия"
+    },
+    {
+      "id": "retro",
+      "label": "Ретро"
+    },
+    {
+      "id": "fashion",
+      "label": "Fashion"
+    },
+    {
+      "id": "business",
+      "label": "Деловое"
+    },
+    {
+      "id": "travel",
+      "label": "Путешествия"
+    },
+    {
+      "id": "holiday",
+      "label": "Праздники"
+    },
+    {
+      "id": "fantasy",
+      "label": "Кино и фэнтези"
+    }
+  ],
+  "stories": [
+    {
+      "id": "north-shore",
+      "title": "Северный берег",
+      "category": "travel"
+    },
+    {
+      "id": "desert-dawn",
+      "title": "Рассвет в пустыне",
+      "category": "travel"
+    },
+    {
+      "id": "alpine-lake",
+      "title": "Горное озеро",
+      "category": "travel"
+    },
+    {
+      "id": "pine-fog",
+      "title": "Хвойный лес в тумане",
+      "category": "autumn"
+    },
+    {
+      "id": "lavender",
+      "title": "Поле лаванды",
+      "category": "summer"
+    },
+    {
+      "id": "winter-forest",
+      "title": "Зимний лес",
+      "category": "winter"
+    },
+    {
+      "id": "neon-roof",
+      "title": "Ночной город с крыши",
+      "category": "trend"
+    },
+    {
+      "id": "old-town",
+      "title": "Старый город",
+      "category": "travel"
+    },
+    {
+      "id": "yellow-street",
+      "title": "Жёлтая улица",
+      "category": "fashion"
+    },
+    {
+      "id": "rail-platform",
+      "title": "Вокзальная платформа",
+      "category": "travel"
+    },
+    {
+      "id": "dusk-bridge",
+      "title": "Мост в сумерках",
+      "category": "travel"
+    },
+    {
+      "id": "rain-window",
+      "title": "Дождь у окна",
+      "category": "autumn"
+    },
+    {
+      "id": "studio-flash",
+      "title": "Студийная вспышка",
+      "category": "studio"
+    },
+    {
+      "id": "linen-window",
+      "title": "Лён и окно",
+      "category": "studio"
+    },
+    {
+      "id": "autumn-coat",
+      "title": "Пальто на аллее",
+      "category": "autumn"
+    },
+    {
+      "id": "editorial-grey",
+      "title": "Редакционный фон",
+      "category": "studio"
+    },
+    {
+      "id": "concrete-loft",
+      "title": "Бетонный лофт",
+      "category": "fashion"
+    },
+    {
+      "id": "mirror-wall",
+      "title": "Зеркальная стена",
+      "category": "fashion"
+    },
+    {
+      "id": "business-portrait",
+      "title": "Деловой портрет",
+      "category": "business"
+    },
+    {
+      "id": "meeting-room",
+      "title": "Переговорная",
+      "category": "business"
+    },
+    {
+      "id": "coffee-shop",
+      "title": "Кофейня",
+      "category": "business"
+    },
+    {
+      "id": "coworking",
+      "title": "Коворкинг",
+      "category": "business"
+    },
+    {
+      "id": "study-room",
+      "title": "Кабинет с книгами",
+      "category": "fantasy"
+    },
+    {
+      "id": "space",
+      "title": "Космос",
+      "category": "fantasy"
+    },
+    {
+      "id": "spy-night",
+      "title": "Шпионская ночь",
+      "category": "fantasy"
+    },
+    {
+      "id": "old-cinema",
+      "title": "Старый кинотеатр",
+      "category": "retro"
+    },
+    {
+      "id": "birthday",
+      "title": "День рождения",
+      "category": "holiday"
+    },
+    {
+      "id": "new-year",
+      "title": "Новый год",
+      "category": "holiday"
+    },
+    {
+      "id": "sunset-terrace",
+      "title": "Терраса на закате",
+      "category": "summer"
+    },
+    {
+      "id": "graduation",
+      "title": "Выпускной",
+      "category": "holiday"
+    },
+    {
+      "id": "ai-mirror-selfie",
+      "title": "Селфи в зеркале лифта",
+      "category": "trend"
+    },
+    {
+      "id": "old-money",
+      "title": "Old money",
+      "category": "trend"
+    },
+    {
+      "id": "clean-girl",
+      "title": "Clean girl",
+      "category": "trend"
+    },
+    {
+      "id": "cyberpunk-city",
+      "title": "Киберпанк",
+      "category": "trend"
+    },
+    {
+      "id": "polaroid-wall",
+      "title": "Стена полароидов",
+      "category": "trend"
+    },
+    {
+      "id": "film-35mm",
+      "title": "Плёнка 35 мм",
+      "category": "trend"
+    },
+    {
+      "id": "flowers-face",
+      "title": "Цветы у лица",
+      "category": "trend"
+    },
+    {
+      "id": "strawberry-picnic",
+      "title": "Клубничный пикник",
+      "category": "trend"
+    },
+    {
+      "id": "night-flash",
+      "title": "Ночная вспышка",
+      "category": "trend"
+    },
+    {
+      "id": "car-golden",
+      "title": "В машине на закате",
+      "category": "trend"
+    },
+    {
+      "id": "balloon-street",
+      "title": "Шары в городе",
+      "category": "trend"
+    },
+    {
+      "id": "cherry-blossom",
+      "title": "Цветущая сакура",
+      "category": "trend"
+    },
+    {
+      "id": "winter-wreath",
+      "title": "Зимний венок",
+      "category": "winter"
+    },
+    {
+      "id": "snow-scarf",
+      "title": "Снег и шарф",
+      "category": "winter"
+    },
+    {
+      "id": "ski-resort",
+      "title": "Горнолыжный курорт",
+      "category": "winter"
+    },
+    {
+      "id": "frozen-lake",
+      "title": "Замёрзшее озеро",
+      "category": "winter"
+    },
+    {
+      "id": "winter-cocoa",
+      "title": "Какао у камина",
+      "category": "winter"
+    },
+    {
+      "id": "snow-mountain-mask",
+      "title": "Зима в горах",
+      "category": "winter"
+    },
+    {
+      "id": "winter-market",
+      "title": "Рождественская ярмарка",
+      "category": "winter"
+    },
+    {
+      "id": "winter-sled",
+      "title": "Санки и смех",
+      "category": "winter"
+    },
+    {
+      "id": "autumn-leaf-heart",
+      "title": "Лист-сердце",
+      "category": "autumn"
+    },
+    {
+      "id": "rowan-berries",
+      "title": "Рябина",
+      "category": "autumn"
+    },
+    {
+      "id": "autumn-cafe-mountains",
+      "title": "Осенняя терраса в горах",
+      "category": "autumn"
+    },
+    {
+      "id": "burgundy-rain",
+      "title": "Бордо и дождь",
+      "category": "autumn"
+    },
+    {
+      "id": "pumpkin-farm",
+      "title": "Тыквенная ферма",
+      "category": "autumn"
+    },
+    {
+      "id": "autumn-park-bw",
+      "title": "Ч/б парк",
+      "category": "autumn"
+    },
+    {
+      "id": "forest-mushrooms",
+      "title": "Лес и грибы",
+      "category": "autumn"
+    },
+    {
+      "id": "knit-sweater",
+      "title": "Уютный свитер",
+      "category": "autumn"
+    },
+    {
+      "id": "sunflowers",
+      "title": "Подсолнухи",
+      "category": "summer"
+    },
+    {
+      "id": "beach-hat",
+      "title": "Шляпа и море",
+      "category": "summer"
+    },
+    {
+      "id": "pool-party",
+      "title": "У бассейна",
+      "category": "summer"
+    },
+    {
+      "id": "lemon-garden",
+      "title": "Лимонный сад",
+      "category": "summer"
+    },
+    {
+      "id": "rain-spring",
+      "title": "Весенний ливень",
+      "category": "summer"
+    },
+    {
+      "id": "bike-ride",
+      "title": "Велосипед и цветы",
+      "category": "summer"
+    },
+    {
+      "id": "field-dandelions",
+      "title": "Одуванчики",
+      "category": "summer"
+    },
+    {
+      "id": "boat-lake",
+      "title": "Лодка на озере",
+      "category": "summer"
+    },
+    {
+      "id": "bw-studio",
+      "title": "Чёрно-белая студия",
+      "category": "studio"
+    },
+    {
+      "id": "color-gel",
+      "title": "Цветной свет",
+      "category": "studio"
+    },
+    {
+      "id": "shadow-blinds",
+      "title": "Тени жалюзи",
+      "category": "studio"
+    },
+    {
+      "id": "paper-backdrop-pastel",
+      "title": "Пастельный фон",
+      "category": "studio"
+    },
+    {
+      "id": "wet-look",
+      "title": "Капли на стекле",
+      "category": "studio"
+    },
+    {
+      "id": "studio-smoke",
+      "title": "Дым и свет",
+      "category": "studio"
+    },
+    {
+      "id": "mirror-reflection",
+      "title": "Отражения",
+      "category": "studio"
+    },
+    {
+      "id": "retro-80s",
+      "title": "Восьмидесятые",
+      "category": "retro"
+    },
+    {
+      "id": "retro-diner",
+      "title": "Американский дайнер",
+      "category": "retro"
+    },
+    {
+      "id": "vintage-90s",
+      "title": "Девяностые",
+      "category": "retro"
+    },
+    {
+      "id": "soviet-retro",
+      "title": "Советское ретро",
+      "category": "retro"
+    },
+    {
+      "id": "film-noir",
+      "title": "Нуар",
+      "category": "retro"
+    },
+    {
+      "id": "retro-roller",
+      "title": "Ролики и диско",
+      "category": "retro"
+    },
+    {
+      "id": "street-style-paris",
+      "title": "Стритстайл Париж",
+      "category": "fashion"
+    },
+    {
+      "id": "leather-look",
+      "title": "Кожа и бетон",
+      "category": "fashion"
+    },
+    {
+      "id": "runway",
+      "title": "Подиум",
+      "category": "fashion"
+    },
+    {
+      "id": "all-white",
+      "title": "Total white",
+      "category": "fashion"
+    },
+    {
+      "id": "red-dress-stairs",
+      "title": "Красное на лестнице",
+      "category": "fashion"
+    },
+    {
+      "id": "denim-total",
+      "title": "Total denim",
+      "category": "fashion"
+    },
+    {
+      "id": "tulle-dream",
+      "title": "Облако фатина",
+      "category": "fashion"
+    },
+    {
+      "id": "ceo-portrait",
+      "title": "Портрет руководителя",
+      "category": "business"
+    },
+    {
+      "id": "speaker-stage",
+      "title": "Спикер на сцене",
+      "category": "business"
+    },
+    {
+      "id": "creative-founder",
+      "title": "Основатель стартапа",
+      "category": "business"
+    },
+    {
+      "id": "doctor-portrait",
+      "title": "Врач",
+      "category": "business"
+    },
+    {
+      "id": "chef-kitchen",
+      "title": "Шеф на кухне",
+      "category": "business"
+    },
+    {
+      "id": "artist-studio",
+      "title": "Художник",
+      "category": "business"
+    },
+    {
+      "id": "santorini",
+      "title": "Санторини",
+      "category": "travel"
+    },
+    {
+      "id": "dubai-desert-safari",
+      "title": "Сафари в пустыне",
+      "category": "travel"
+    },
+    {
+      "id": "tokyo-night",
+      "title": "Ночной Токио",
+      "category": "travel"
+    },
+    {
+      "id": "venice-gondola",
+      "title": "Венеция",
+      "category": "travel"
+    },
+    {
+      "id": "bali-swing",
+      "title": "Качели на Бали",
+      "category": "travel"
+    },
+    {
+      "id": "istanbul-rooftop",
+      "title": "Крыши Стамбула",
+      "category": "travel"
+    },
+    {
+      "id": "cappadocia-balloons",
+      "title": "Каппадокия",
+      "category": "travel"
+    },
+    {
+      "id": "valentine",
+      "title": "День влюблённых",
+      "category": "holiday"
+    },
+    {
+      "id": "march-8",
+      "title": "8 Марта",
+      "category": "holiday"
+    },
+    {
+      "id": "wedding-bride",
+      "title": "Свадебный образ",
+      "category": "holiday"
+    },
+    {
+      "id": "easter-spring",
+      "title": "Пасха",
+      "category": "holiday"
+    },
+    {
+      "id": "prom-night",
+      "title": "Выпускной бал",
+      "category": "holiday"
+    },
+    {
+      "id": "elf-forest",
+      "title": "Эльф",
+      "category": "fantasy"
+    },
+    {
+      "id": "knight-armor",
+      "title": "Рыцарь",
+      "category": "fantasy"
+    },
+    {
+      "id": "mermaid-sea",
+      "title": "Русалка",
+      "category": "fantasy"
+    },
+    {
+      "id": "superhero",
+      "title": "Супергерой",
+      "category": "fantasy"
+    },
+    {
+      "id": "wizard-library",
+      "title": "Магическая библиотека",
+      "category": "fantasy"
+    },
+    {
+      "id": "vampire-gothic",
+      "title": "Готика",
+      "category": "fantasy"
+    }
+  ]
+}

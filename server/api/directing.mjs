@@ -241,13 +241,10 @@ const fill = (text, p) =>
  * Кадры для локации: по умолчанию 5 (общий, снизу, сверху, портрет, момент).
  * Шестой («Сидя») подставляется вместо «Снизу» для деловых и интерьерных сцен.
  */
-export function directShots(locationId) {
-  const p = props[locationId] ?? [
-    'a meaningful object',
-    'a chair',
-    'walking naturally',
-    'natural, relaxed',
-  ]
+export function directShots(locationId, customProps) {
+  // customProps — реквизит сюжета, если он задан в самом сюжете (photo-stories.mjs).
+  const p = customProps ??
+    props[locationId] ?? ['a meaningful object', 'a chair', 'walking naturally', 'natural, relaxed']
   const indoor = [
     'business-portrait',
     'meeting-room',

@@ -38,10 +38,13 @@ export function VideoCatalogScreen({
 }) {
   const media = useMedia()
   const [category, setCategory] = useState<VideoCategoryId>('all')
-  const list = useMemo(
-    () => videoTemplates.filter((v) => category === 'all' || v.category === category),
-    [category],
-  )
+  const list = useMemo(() => {
+    // Шаблоны с готовым роликом на сервере; пока роликов нет — все.
+    const ready = videoTemplates.filter((v) => media.videos[v.id])
+    return (ready.length ? ready : videoTemplates).filter(
+      (v) => category === 'all' || v.category === category,
+    )
+  }, [category, media.videos])
   const page = usePaged(list, 10)
   return (
     <div className="grid gap-5 px-4 pt-6 md:px-6">
@@ -89,9 +92,9 @@ export function VideoCatalogScreen({
               <PosterCard
                 index={i}
                 title={v.title}
-                tag={`≈19 с · ${v.ratio}`}
+                tag={v.people === 2 ? `Вдвоём · ${v.ratio}` : `≈19 с · ${v.ratio}`}
                 frames={4}
-                unit="плана"
+                unit="сцены"
                 src={media.videos[v.id]?.poster ?? v.cover}
                 video={media.videos[v.id]?.preview}
                 onOpen={() => onOpen(v.id)}
@@ -167,7 +170,7 @@ export function VideoDetailScreen({
           {[
             ['Ролик', '≈19 с'],
             ['Формат', template.ratio],
-            ['Фото', '1–3'],
+            ['Фото', template.people === 2 ? '2 человека' : '1–3'],
           ].map(([term, value]) => (
             <div key={term} className="grid gap-1 px-1">
               <dt className="text-caption tracking-label text-ink-muted text-[11px] uppercase">
@@ -177,6 +180,26 @@ export function VideoDetailScreen({
             </div>
           ))}
         </dl>
+
+        <div className="grid gap-3">
+          <Label>Сценарий</Label>
+          <ol className="grid gap-2">
+            {template.shots.map((shot, i) => (
+              <li
+                key={shot}
+                className="chamfer-sm bg-canvas-raised text-ink flex min-h-11 items-center gap-3 px-4"
+              >
+                <span className="text-accent font-display tabular-nums">0{i + 1}</span>
+                {shot}
+              </li>
+            ))}
+          </ol>
+          {template.people === 2 ? (
+            <p className="text-caption text-ink-muted">
+              Сюжет на двоих: загрузите по одному фото каждого человека — пары или друзей.
+            </p>
+          ) : null}
+        </div>
 
         <div className="grid gap-3">
           <Label>Музыка</Label>

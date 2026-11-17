@@ -34,16 +34,14 @@ try {
   console.log('→ Установка и перезапуск')
   const script = `set -e
 mkdir -p ${target} /var/lib/creator-studio /var/www/creator-media/jobs
-rm -rf ${target}.new && mkdir -p ${target}.new
-tar -xzf /tmp/${archive} -C ${target}.new
-rm -rf ${target}.old
-[ -d ${target} ] && mv ${target} ${target}.old
-mv ${target}.new ${target}
+# Файлы обновляются на месте: каталог не подменяется, поэтому фабрики, которые сейчас
+# работают из /opt/creator-studio/factory, не теряют рабочий каталог.
+tar -xzf /tmp/${archive} -C ${target}
 cp ${target}/creator-studio-api.service /etc/systemd/system/creator-studio-api.service
 systemctl daemon-reload
 systemctl enable --quiet creator-studio-api
 systemctl restart creator-studio-api
-rm -rf ${target}.old /tmp/${archive}
+rm -f /tmp/${archive}
 for i in $(seq 1 20); do curl -fsS 127.0.0.1:3480/api/health && exit 0; sleep 0.5; done
 journalctl -u creator-studio-api -n 30 --no-pager; exit 1`
   run('ssh', ['-p', port, '-o', 'BatchMode=yes', remote, script])

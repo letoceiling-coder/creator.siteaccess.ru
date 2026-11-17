@@ -118,11 +118,40 @@ test.describe('create a photo session', () => {
     expect(uploads[0]).toContain('name="duration"\r\n\r\n10')
   })
 
+  test('couple story: two photos, script and both consents', async ({ page }) => {
+    const uploads = await mockApi(page)
+    await page.goto('/video/couple-hug', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('Сюжет на двоих')).toBeVisible()
+    await page.getByRole('button', { name: 'Создать со своим фото' }).click()
+    await expect(page).toHaveURL(/\/video\/couple-hug\/create$/)
+    const next = page.getByRole('button', { name: 'Дальше' })
+    await page.getByTestId('photo-input').setInputFiles({
+      name: 'first.jpg',
+      mimeType: 'image/jpeg',
+      buffer: photo,
+    })
+    await expect(next).toBeDisabled()
+    await page.getByTestId('photo-input').setInputFiles({
+      name: 'second.jpg',
+      mimeType: 'image/jpeg',
+      buffer: photo,
+    })
+    await next.click()
+    await expect(page.getByRole('heading', { name: 'Сценарий' })).toBeVisible()
+    await page.getByRole('button', { name: 'Дальше' }).click()
+    await page.getByText('Мы оба согласны').click()
+    await page.getByRole('button', { name: 'Создать' }).click()
+    await expect(page).toHaveURL(new RegExp(`/jobs/${jobId}$`))
+    expect(uploads[0]).toContain('filename="first.jpg"')
+    expect(uploads[0]).toContain('filename="second.jpg"')
+    expect(uploads[0]).toContain('name="target"\r\n\r\ncouple-hug')
+  })
+
   test('opens the video wizard from a template', async ({ page }) => {
     await mockApi(page)
-    await page.goto('/video/coast-run', { waitUntil: 'domcontentloaded' })
+    await page.goto('/video/viral-dance', { waitUntil: 'domcontentloaded' })
     await page.getByRole('button', { name: 'Создать со своим фото' }).click()
-    await expect(page).toHaveURL(/\/video\/coast-run\/create$/)
+    await expect(page).toHaveURL(/\/video\/viral-dance\/create$/)
     await expect(page.getByRole('heading', { name: 'Ваши фото' })).toBeVisible()
   })
 })

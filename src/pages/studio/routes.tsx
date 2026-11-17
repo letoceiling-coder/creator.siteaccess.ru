@@ -1,6 +1,7 @@
 import { useNavigate, useParams } from 'react-router'
 import { Alert } from '@/components/ui/alert.tsx'
 import { scenarios } from '@/features/catalog/data.ts'
+import { findScenario } from '@/features/catalog/photo-data.ts'
 import { videoTemplates } from '@/features/catalog/video-data.ts'
 import type { JobKind } from '@/features/jobs/api.ts'
 import { motions } from '@/features/jobs/motions.ts'
@@ -12,7 +13,8 @@ import { VideoCatalogScreen, VideoDetailScreen } from './video-screens.tsx'
 
 function useScenario() {
   const { id } = useParams()
-  return scenarios.find((s) => s.id === id)
+  const media = useMedia()
+  return findScenario(id, media.photoStories)
 }
 
 function useTemplate() {
@@ -45,7 +47,7 @@ function useDescribe() {
       const v = videoTemplates.find((t) => t.id === target)
       return v ? { title: v.title, cover: media.videos[v.id]?.poster ?? v.cover } : undefined
     }
-    const s = scenarios.find((t) => t.id === target)
+    const s = findScenario(target, media.photoStories)
     return s ? { title: s.title, cover: s.cover } : undefined
   }
 }
@@ -57,6 +59,7 @@ export function HomePage() {
     <HomeScreen
       onOpen={(id) => void navigate(paths.photo(id))}
       onCatalog={() => void navigate(paths.photos)}
+      onVideo={() => void navigate(paths.video)}
     />
   )
 }
@@ -110,7 +113,12 @@ export function VideoCreatePage() {
     id: template.id,
     title: template.title,
     cover: media.videos[template.id]?.poster ?? template.cover,
-    output: 'ролик ≈19 секунд: четыре плана и музыка',
+    output:
+      template.people === 2
+        ? 'ролик на двоих ≈19 секунд: четыре сцены и музыка'
+        : 'ролик ≈19 секунд: четыре сцены и музыка',
+    people: template.people,
+    script: template.shots,
     eta: 'около 10 минут',
   }
   return (

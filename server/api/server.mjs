@@ -167,11 +167,18 @@ async function createJob(req, res) {
   if (!plan) throw new HttpError(404, 'Сценарий не найден')
 
   const files = form.getAll('photos').filter((f) => typeof f === 'object' && f !== null)
-  const maxFiles = kind === 'animate' ? 1 : 3
-  if (files.length < 1 || files.length > maxFiles)
+  // Для сюжета на двоих — ровно два фото: первое — первый человек, второе — второй.
+  const pair = kind === 'video' && plan.people === 2
+  const minFiles = pair ? 2 : 1
+  const maxFiles = kind === 'animate' ? 1 : pair ? 2 : 3
+  if (files.length < minFiles || files.length > maxFiles)
     throw new HttpError(
       400,
-      kind === 'animate' ? 'Нужно одно фото' : 'Нужно от одного до трёх фото',
+      kind === 'animate'
+        ? 'Нужно одно фото'
+        : pair
+          ? 'Нужно два фото: по одному на каждого человека'
+          : 'Нужно от одного до трёх фото',
     )
 
   const id = randomBytes(16).toString('hex')

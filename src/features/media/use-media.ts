@@ -25,12 +25,20 @@ export interface VideoClip {
   withMusic: boolean
 }
 
+export interface PhotoStorySamples {
+  cover: string
+  thumb: string
+  shots: { src: string; thumb: string; label: string }[]
+}
+
 export interface Media {
   photos: PhotoLocation[]
   videos: Record<string, VideoClip>
+  /** Образцы фото-сюжетов каталога по id. */
+  photoStories: Record<string, PhotoStorySamples>
 }
 
-const empty: Media = { photos: [], videos: {} }
+const empty: Media = { photos: [], videos: {}, photoStories: {} }
 let cache: Promise<Media> | undefined
 
 async function getJson<T>(url: string): Promise<T | undefined> {
@@ -48,9 +56,11 @@ export function loadMedia(): Promise<Media> {
   cache ??= Promise.all([
     getJson<{ locations: PhotoLocation[] }>('/media/photos/manifest.json'),
     getJson<Record<string, VideoClip>>('/media/video/manifest.json'),
-  ]).then(([photos, videos]) => ({
+    getJson<{ stories: Record<string, PhotoStorySamples> }>('/media/photo-stories/manifest.json'),
+  ]).then(([photos, videos, stories]) => ({
     photos: photos?.locations ?? [],
     videos: videos ?? {},
+    photoStories: stories?.stories ?? {},
   }))
   return cache
 }

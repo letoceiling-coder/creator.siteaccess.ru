@@ -2,14 +2,9 @@
  * Что генерируется для задачи пользователя. Промпты собираются только из готовых пресетов:
  * свободного текста от пользователя нет, это ограничивает злоупотребления.
  */
-import { readFileSync } from 'node:fs'
-import { locations } from '../factory/locations.mjs'
-import { scenes, size } from '../factory/video-scenes.mjs'
+import { photoStories } from '../factory/photo-stories.mjs'
+import { stories } from '../factory/stories.mjs'
 import { camera, directShots, lighting } from './directing.mjs'
-
-const templates = JSON.parse(
-  readFileSync(new URL('../factory/video-templates.json', import.meta.url), 'utf8'),
-)
 
 /** Сценарии каталога сайта → локации фабрики. Любую локацию можно заказать и по её id. */
 const scenarioToLocation = {
@@ -37,11 +32,11 @@ export const negative =
 
 export function photoPlan(target, options) {
   const locationId = Object.hasOwn(scenarioToLocation, target) ? scenarioToLocation[target] : target
-  const loc = locations.find((l) => l.id === locationId)
+  const loc = photoStories.find((l) => l.id === locationId)
   if (!loc) return undefined
   const outfit = outfits[options.outfit] ?? ''
   const light = lighting[options.time] ?? lighting.day
-  return directShots(loc.id).map((shot, i) => ({
+  return directShots(loc.id, loc.props).map((shot, i) => ({
     type: 'photo',
     name: shot.name,
     width: 1104,
@@ -51,66 +46,53 @@ export function photoPlan(target, options) {
   }))
 }
 
-/**
- * Видеошаблон как работа съёмочной группы: четыре плана с разной оптикой и движением камеры,
- * склейка с переходами и музыкой — ролик около 19 секунд (не меньше 15).
- */
-const videoShots = [
-  {
-    name: 'Общий план',
-    frame:
-      'Wide establishing cinematic frame, 24mm lens, full body, the person walks naturally through the environment toward the camera, arms relaxed',
-    move: 'smooth slow dolly-in establishing camera move',
-    withScene: true,
-  },
-  {
-    name: 'Средний план',
-    frame:
-      'Medium shot from a three-quarter angle, 50mm lens, waist-up, one hand in a pocket, head turned toward the camera',
-    move: 'slow cinematic orbit around the person, parallax in the background',
-    withScene: true,
-  },
-  {
-    name: 'Крупный план',
-    frame:
-      'Head-and-shoulders portrait cropped at mid-chest, 85mm lens, shallow depth of field, natural anatomical proportions, hands are not visible',
-    move: 'very slow push-in on the face, the person blinks and gives a subtle warm smile into the camera, hands stay out of frame',
-    withScene: false,
-  },
-  {
-    name: 'Финал',
-    frame:
-      'Medium-full shot, 35mm lens, the person stands facing the camera with a natural confident smile, the location visible around them',
-    move: 'slow crane pull-back revealing the location, the person keeps looking toward the camera and smiles',
-    withScene: false,
-  },
-]
-
 /** Лицо целиком в кадре: без этого ролик и фото отбраковываются проверкой. */
 export const faceVisible =
   'The face is clearly visible and turned toward the camera, the whole head is fully inside the frame with headroom above it.'
+const facesVisible =
+  'Both faces are clearly visible and turned toward the camera, both heads fully inside the frame with headroom.'
+const identityPair =
+  'These are exactly the two people from the reference photos: the first reference photo is the first person, the second reference photo is the second person. Keep both faces, skin tones, ages and identities unchanged. Take only identities from the references, not poses, clothing or backgrounds.'
 
+const sizes = {
+  '9:16': { still: [928, 1664], video: [480, 832] },
+  '16:9': { still: [1664, 928], video: [832, 480] },
+  '1:1': { still: [1328, 1328], video: [640, 640] },
+}
+
+/**
+ * Видеошаблон — сюжет из четырёх сцен-действий (stories.mjs): у каждой свой первый кадр
+ * и своё действие с движением камеры. Склейка с переходами и музыкой — около 19 секунд.
+ */
 export function videoPlan(target, options) {
-  const template = templates.find((t) => t.id === target)
-  const scene = Object.hasOwn(scenes, target) ? scenes[target] : undefined
-  if (!template || !scene) return undefined
-  const sz = size[template.ratio]
-  const outfit = outfits[options.outfit] ?? ''
+  const story = stories.find((t) => t.id === target)
+  if (!story) return undefined
+  const sz = sizes[story.ratio]
+  const pair = story.people === 2
+  const outfit = pair ? '' : (outfits[options.outfit] ?? '')
+  // Демо фабрики: оба героя уже на одном кадре-референсе.
+  const pairIdentity = options.pairFromOneImage
+    ? 'These are exactly the same two people as in the reference image: keep both faces, skin tones, ages and identities unchanged. Take only identities from the reference, not poses or backgrounds.'
+    : identityPair
+  const subject = pair
+    ? 'Subject: the two people from the reference photos'
+    : `Subject: the person from the reference photos${outfit ? `, ${outfit}` : ''}`
   return {
-    template,
-    shots: videoShots.map((shot, i) => ({
-      name: shot.name,
+    template: story,
+    people: story.people,
+    shots: story.beats.map((beat, i) => ({
+      name: beat.ru,
       still: {
         width: sz.still[0],
         height: sz.still[1],
         seed: 81_000 + i * 131,
-        prompt: `${shot.frame}. Subject: the person from the reference photos as the main character${outfit ? `, ${outfit}` : ''}. Scene: ${scene[0]}. ${faceVisible} ${identity} ${style}`,
+        prompt: `Cinematic film still: ${beat.still}. ${subject}. ${pair ? facesVisible : faceVisible} ${pair ? pairIdentity : identity} ${style}`,
       },
       video: {
         width: sz.video[0],
         height: sz.video[1],
         seed: 82_000 + i * 17,
-        prompt: `${shot.withScene ? `${scene[1]}, ${shot.move}` : shot.move}, cinematic, natural motion, the face stays visible, consistent and inside the frame`,
+        prompt: `${beat.motion}, cinematic, natural realistic motion, ${pair ? 'both faces stay' : 'the face stays'} visible, consistent and inside the frame`,
       },
     })),
   }

@@ -22,7 +22,7 @@ import {
   wanVideoWorkflow,
 } from '../factory/comfy.mjs'
 import { assembleShots, encode } from '../factory/assemble.mjs'
-import { imageHasFace, MIN_FACE_RATIO, videoFaceRatio } from '../factory/faces.mjs'
+import { imageHasFace, MIN_FACE_RATIO, MIN_PAIR_RATIO, videoFaceRatio } from '../factory/faces.mjs'
 import { toJpeg, toWebp } from './images.mjs'
 import { negative, planFor } from './presets.mjs'
 
@@ -98,18 +98,18 @@ export function startWorker({ q, config, log }) {
   }
 
   /** Проверка качества не должна ронять задачу: если детектор недоступен, кадр принимается. */
-  async function faceOk(buffer) {
+  async function faceOk(buffer, minFaces = 1) {
     try {
-      return (await imageHasFace(buffer)).ok
+      return (await imageHasFace(buffer, minFaces)).ok
     } catch (error) {
       log(`проверка лица недоступна: ${error.message}`)
       return true
     }
   }
 
-  async function faceRatio(file) {
+  async function faceRatio(file, minFaces = 1) {
     try {
-      return (await videoFaceRatio(file)).ratio
+      return (await videoFaceRatio(file, minFaces)).ratio
     } catch (error) {
       log(`проверка лица недоступна: ${error.message}`)
       return 1
@@ -117,7 +117,7 @@ export function startWorker({ q, config, log }) {
   }
 
   /** Кадр, где лицо видно целиком: до трёх попыток с разными сидами. */
-  async function editWithFace(job, images, shot, index, upscale) {
+  async function editWithFace(job, images, shot, index, upscale, minFaces = 1) {
     let first
     for (let attempt = 0; attempt < 3; attempt++) {
       checkCancel(job.id)
@@ -129,14 +129,14 @@ export function startWorker({ q, config, log }) {
         upscale,
       )
       first ??= buf
-      if (await faceOk(buf)) return buf
+      if (await faceOk(buf, minFaces)) return buf
       log(`задача ${job.id.slice(0, 8)}: кадр ${index + 1} без лица, попытка ${attempt + 2}`)
     }
     return first
   }
 
   /** Клип, где лицо видно хотя бы в 80% кадров: до трёх попыток, иначе лучший. */
-  async function clipWithFace(job, imageBuf, tag, clip, width, height, file) {
+  async function clipWithFace(job, imageBuf, tag, clip, width, height, file, minFaces = 1) {
     let best = { ratio: -1, path: '' }
     for (let attempt = 0; attempt < 3; attempt++) {
       checkCancel(job.id)
@@ -150,14 +150,14 @@ export function startWorker({ q, config, log }) {
         height,
         path,
       )
-      const ratio = await faceRatio(path)
+      const ratio = await faceRatio(path, minFaces)
       if (ratio > best.ratio) {
         if (best.path) rmSync(best.path, { force: true })
         best = { ratio, path }
       } else {
         rmSync(path, { force: true })
       }
-      if (ratio >= MIN_FACE_RATIO) break
+      if (ratio >= (minFaces > 1 ? MIN_PAIR_RATIO : MIN_FACE_RATIO)) break
       log(
         `задача ${job.id.slice(0, 8)}: клип ${tag} лицо в ${Math.round(ratio * 100)}% кадров, пересъёмка`,
       )
@@ -239,7 +239,7 @@ export function startWorker({ q, config, log }) {
     for (const [i, shot] of plan.shots.entries()) {
       checkCancel(job.id)
       const still = join(out, `still-${i}.png`)
-      writeFileSync(still, await editWithFace(job, images, shot.still, i))
+      writeFileSync(still, await editWithFace(job, images, shot.still, i, undefined, plan.people))
       if (i === 0) await toWebp(still, join(out, 'poster.webp'), 720)
       q.progress.run(++step, '[]', job.id)
       checkCancel(job.id)
@@ -252,6 +252,7 @@ export function startWorker({ q, config, log }) {
         shot.video.width,
         shot.video.height,
         clip,
+        plan.people,
       )
       rmSync(still)
       clips.push(clip)

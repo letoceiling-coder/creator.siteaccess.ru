@@ -4,15 +4,12 @@ import { useMemo, useState } from 'react'
 import { ApertureTabs } from '@/components/studio/aperture-tabs.tsx'
 import { PosterCard } from '@/components/studio/poster-card.tsx'
 import { ActionBar } from '@/components/studio/action-bar.tsx'
+import { MoreButton } from '@/components/studio/more-button.tsx'
+import { photoCategories, photoStories, toScenario } from '@/features/catalog/photo-data.ts'
+import { useMedia } from '@/features/media/use-media.ts'
+import { usePaged } from '@/hooks/use-paged.ts'
 import { StudioButton } from '@/components/studio/studio-button.tsx'
-import { LocationsGallery } from './locations-gallery.tsx'
-import {
-  categories,
-  heroDeck,
-  scenarios,
-  type CategoryId,
-  type Scenario,
-} from '@/features/catalog/data.ts'
+import { heroDeck, scenarios, type Scenario } from '@/features/catalog/data.ts'
 
 const enter = { duration: 0.36, ease: [0.22, 1, 0.36, 1] as const }
 
@@ -77,10 +74,18 @@ const steps = [
 export function HomeScreen({
   onOpen,
   onCatalog,
+  onVideo,
 }: {
   onOpen: (id: string) => void
   onCatalog: () => void
+  onVideo: () => void
 }) {
+  const media = useMedia()
+  // Популярное: трендовые сюжеты, у которых уже есть образцы.
+  const popular = photoStories
+    .map((story, i) => toScenario(story, media.photoStories[story.id], i))
+    .filter((s) => s.category === 'trend' && media.photoStories[s.id])
+    .slice(0, 8)
   return (
     <div className="grid gap-12 pb-8">
       <section className="relative grid gap-6 overflow-hidden px-4 pt-6 md:grid-cols-[1fr_minmax(0,22rem)] md:items-center md:gap-x-16 md:px-6 md:pt-14">
@@ -110,7 +115,9 @@ export function HomeScreen({
           <StudioButton arrow onClick={onCatalog}>
             Выбрать фотосессию
           </StudioButton>
-          <StudioButton variant="quiet">Смотреть видеосценарии</StudioButton>
+          <StudioButton variant="quiet" onClick={onVideo}>
+            Смотреть видеосюжеты
+          </StudioButton>
         </div>
       </section>
 
@@ -119,15 +126,15 @@ export function HomeScreen({
           <Label>Популярное</Label>
           <h2 className="font-display text-title text-ink mt-2">Фотосессии</h2>
         </div>
-        <div className="hide-scroll flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 md:grid md:grid-cols-4 md:overflow-visible md:px-6">
-          {scenarios.slice(0, 4).map((s, i) => (
+        <div className="hide-scroll flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 md:grid md:grid-cols-4 md:overflow-visible md:px-6 lg:grid-cols-4">
+          {(popular.length ? popular : scenarios.slice(0, 4)).map((s, i) => (
             <PosterCard
               key={s.id}
               index={i}
               title={s.title}
               tag={s.tag}
               frames={s.frames}
-              src={s.cover}
+              src={media.photoStories[s.id]?.thumb ?? s.cover}
               onOpen={() => onOpen(s.id)}
               className="w-[58%] shrink-0 snap-start md:w-auto"
             />
@@ -182,21 +189,40 @@ export function HomeScreen({
 /* ───────────── Каталог ───────────── */
 
 export function CatalogScreen({ onOpen }: { onOpen: (id: string) => void }) {
-  const [category, setCategory] = useState<CategoryId>('all')
+  const media = useMedia()
+  const [category, setCategory] = useState('all')
+  // Пока сервер готовит образцы, показываем только сюжеты, у которых они уже есть.
+  const ready = useMemo(() => {
+    const withSamples = photoStories.filter((s) => media.photoStories[s.id])
+    return withSamples.length ? withSamples : photoStories
+  }, [media.photoStories])
   const list = useMemo(
-    () => scenarios.filter((s) => category === 'all' || s.category === category),
-    [category],
+    () =>
+      ready
+        .map((story, i) => toScenario(story, media.photoStories[story.id], i))
+        .filter((s) => category === 'all' || s.category === category),
+    [category, ready, media.photoStories],
   )
+  const page = usePaged(list, 12)
   return (
     <div className="grid gap-5 px-4 pt-6 md:px-6">
       <div className="grid gap-2">
         <Label>Каталог</Label>
         <h1 className="font-display text-title text-ink text-[2rem]">Фотосессии</h1>
+        <p className="text-body text-ink-muted max-w-xl">
+          {ready.length} сюжетов: тренды, сезоны, студия, ретро, путешествия, праздники и кино. В
+          каждом — пять кадров с разных ракурсов.
+        </p>
       </div>
-      <ApertureTabs label="Категории" items={categories} value={category} onChange={setCategory} />
+      <ApertureTabs
+        label="Категории"
+        items={photoCategories}
+        value={category}
+        onChange={setCategory}
+      />
       <motion.div layout className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-5 lg:grid-cols-4">
         <AnimatePresence mode="popLayout">
-          {list.map((s, i) => (
+          {page.visible.map((s, i) => (
             <motion.div
               key={s.id}
               layout
@@ -210,14 +236,20 @@ export function CatalogScreen({ onOpen }: { onOpen: (id: string) => void }) {
                 title={s.title}
                 tag={s.tag}
                 frames={s.frames}
-                src={s.cover}
+                src={media.photoStories[s.id]?.thumb ?? s.cover}
                 onOpen={() => onOpen(s.id)}
               />
             </motion.div>
           ))}
         </AnimatePresence>
       </motion.div>
-      <LocationsGallery />
+      <MoreButton
+        shown={page.visible.length}
+        total={page.total}
+        left={page.left}
+        step={12}
+        onMore={page.more}
+      />
     </div>
   )
 }

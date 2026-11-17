@@ -1,362 +1,650 @@
 [
   {
-    "id": "coast-run",
-    "title": "Бег по берегу",
-    "category": "trip",
-    "seconds": 10,
+    "id": "champagne-party",
+    "title": "Праздничный взрыв",
+    "category": "trend",
+    "seconds": 19,
     "ratio": "9:16",
-    "blurb": "Рассвет, холодный ветер, шаг по мокрому песку.",
-    "shots": ["Общий план берега", "Шаг по песку, камера сбоку", "Лицо крупно, взгляд к горизонту"],
-    "genre": "Melodic house",
+    "people": 1,
+    "blurb": "Торт, искры и фонтан шампанского — кадр для сторис.",
+    "shots": [
+      "Торт с искрами",
+      "Фонтан шампанского",
+      "Конфетти",
+      "Тост в камеру"
+    ],
+    "genre": "Festive pop",
     "bpm": 120,
-    "mood": "Свежо, воздух"
+    "mood": "Праздник, восторг"
   },
   {
-    "id": "neon-roof",
-    "title": "Крыша в неоне",
-    "category": "trip",
-    "seconds": 8,
+    "id": "above-clouds",
+    "title": "Над облаками",
+    "category": "trend",
+    "seconds": 19,
     "ratio": "9:16",
-    "blurb": "Ночной город внизу, вы у парапета.",
-    "shots": ["Огни города снизу вверх", "Подход к парапету", "Поворот к камере"],
-    "genre": "Synthwave",
-    "bpm": 104,
-    "mood": "Ночь, масштаб"
-  },
-  {
-    "id": "desert-dawn",
-    "title": "Рассвет в пустыне",
-    "category": "trip",
-    "seconds": 12,
-    "ratio": "16:9",
-    "blurb": "Дюны, длинные тени, тихий кадр.",
-    "shots": ["Дюны панорамой", "Силуэт на гребне", "Ветер в одежде"],
-    "genre": "Ambient electronic",
-    "bpm": 90,
-    "mood": "Простор, тишина"
-  },
-  {
-    "id": "old-town",
-    "title": "Старый город",
-    "category": "trip",
-    "seconds": 10,
-    "ratio": "9:16",
-    "blurb": "Узкие улицы, тёплый камень, мягкий вечерний свет.",
-    "shots": ["Арка и мостовая", "Прогулка вдоль стены", "Остановка у окна"],
-    "genre": "Acoustic indie",
-    "bpm": 96,
-    "mood": "Тепло, неспешно"
-  },
-  {
-    "id": "alpine-lake",
-    "title": "Горное озеро",
-    "category": "trip",
-    "seconds": 12,
-    "ratio": "16:9",
-    "blurb": "Вода как зеркало, туман над кромкой леса.",
-    "shots": ["Озеро на рассвете", "Вы у воды", "Отражение крупно"],
+    "people": 1,
+    "blurb": "Скала над морем облаков и полёт дрона вокруг вас.",
+    "shots": [
+      "Над облаками",
+      "Руки в стороны",
+      "Облёт дрона",
+      "Отлёт"
+    ],
     "genre": "Cinematic ambient",
-    "bpm": 76,
-    "mood": "Покой, глубина"
-  },
-  {
-    "id": "night-train",
-    "title": "Ночной поезд",
-    "category": "trip",
-    "seconds": 8,
-    "ratio": "9:16",
-    "blurb": "Огни за окном, вы у стекла вагона.",
-    "shots": ["Окно, огни полосами", "Профиль у стекла", "Улыбка в отражении"],
-    "genre": "Lo-fi chill",
     "bpm": 84,
-    "mood": "Задумчиво, мягко"
+    "mood": "Свобода, масштаб"
   },
   {
-    "id": "editorial-walk",
-    "title": "Editorial-проход",
-    "category": "style",
-    "seconds": 8,
+    "id": "road-freedom",
+    "title": "Свобода в дороге",
+    "category": "trend",
+    "seconds": 19,
     "ratio": "9:16",
-    "blurb": "Журнальная походка на чистом фоне.",
-    "shots": ["Шаг на камеру", "Поворот плеча", "Жест рукой в кадре"],
-    "genre": "Minimal techno",
-    "bpm": 124,
-    "mood": "Строго, чётко"
-  },
-  {
-    "id": "yellow-street",
-    "title": "Жёлтая улица",
-    "category": "style",
-    "seconds": 6,
-    "ratio": "9:16",
-    "blurb": "Яркий акцент в серой городской сцене.",
-    "shots": ["Серый фон, пятно цвета", "Шаг через переход", "Резкий поворот"],
-    "genre": "Funk house",
+    "people": 1,
+    "blurb": "Горная дорога, окно машины и руки навстречу ветру.",
+    "shots": [
+      "За окном",
+      "Руки вверх",
+      "Остановка",
+      "Закат"
+    ],
+    "genre": "Indie rock",
     "bpm": 118,
-    "mood": "Энергия, игра"
+    "mood": "Драйв, свобода"
   },
   {
-    "id": "linen-light",
-    "title": "Лён и свет",
-    "category": "style",
-    "seconds": 10,
+    "id": "viral-dance",
+    "title": "Вирусный танец",
+    "category": "trend",
+    "seconds": 19,
     "ratio": "9:16",
-    "blurb": "Лёгкая ткань, окно, мягкие тени.",
-    "shots": ["Занавес на ветру", "Ткань крупно", "Вы у окна"],
-    "genre": "Soft pop",
-    "bpm": 100,
-    "mood": "Нежно, воздух"
+    "people": 1,
+    "blurb": "Тренд-танец на крыше: ритм, движения, финальная поза.",
+    "shots": [
+      "Старт",
+      "Связка",
+      "Ближе",
+      "Финальная поза"
+    ],
+    "genre": "Dance pop",
+    "bpm": 124,
+    "mood": "Энергия, ритм"
   },
   {
-    "id": "coat-season",
-    "title": "Пальто сезона",
-    "category": "style",
-    "seconds": 8,
+    "id": "neon-rain-dance",
+    "title": "Танец под неоновым дождём",
+    "category": "trend",
+    "seconds": 19,
     "ratio": "9:16",
-    "blurb": "Осенний лукбук: пальто, аллея, листья.",
-    "shots": ["Аллея общим планом", "Шаг в пальто", "Деталь воротника"],
-    "genre": "Neo-soul",
-    "bpm": 92,
-    "mood": "Уют, шарм"
-  },
-  {
-    "id": "studio-flash",
-    "title": "Студийная вспышка",
-    "category": "style",
-    "seconds": 6,
-    "ratio": "1:1",
-    "blurb": "Кадры со вспышкой, смена поз.",
-    "shots": ["Поза 1 со вспышкой", "Поза 2", "Финальный портрет"],
-    "genre": "Electro pop",
-    "bpm": 126,
-    "mood": "Яркий, быстрый"
-  },
-  {
-    "id": "rail-fit",
-    "title": "Вокзальный образ",
-    "category": "style",
-    "seconds": 8,
-    "ratio": "9:16",
-    "blurb": "Платформа, глубина, сдержанный цвет.",
-    "shots": ["Платформа в перспективе", "Шаг вдоль путей", "Взгляд в камеру"],
-    "genre": "Dark pop",
-    "bpm": 98,
-    "mood": "Холод, стиль"
-  },
-  {
-    "id": "pro-intro",
-    "title": "Деловое приветствие",
-    "category": "brand",
-    "seconds": 8,
-    "ratio": "16:9",
-    "blurb": "Короткое видео для профиля и сайта.",
-    "shots": ["Офис в размытии", "Вы в кадре, кивок", "Подпись и контакт"],
-    "genre": "Corporate uplift",
+    "people": 1,
+    "blurb": "Ночная улица, неон, дождь и танец под ним.",
+    "shots": [
+      "Под дождём",
+      "Танец",
+      "Поворот",
+      "Взгляд"
+    ],
+    "genre": "Synthwave",
     "bpm": 110,
-    "mood": "Уверенно, чисто"
+    "mood": "Кино, ночь"
   },
   {
-    "id": "expert-card",
-    "title": "Карточка эксперта",
-    "category": "brand",
-    "seconds": 10,
+    "id": "magic-forest",
+    "title": "Волшебный лес",
+    "category": "trend",
+    "seconds": 19,
+    "ratio": "16:9",
+    "people": 1,
+    "blurb": "Светящиеся огоньки, магия в ладонях и полёт.",
+    "shots": [
+      "Огоньки",
+      "Магия в ладонях",
+      "Левитация",
+      "Полёт"
+    ],
+    "genre": "Fantasy orchestral",
+    "bpm": 92,
+    "mood": "Сказка, магия"
+  },
+  {
+    "id": "movie-star",
+    "title": "Кинозвезда",
+    "category": "trend",
+    "seconds": 19,
     "ratio": "9:16",
-    "blurb": "Имя, роль и три тезиса в кадре.",
-    "shots": ["Портрет с именем", "Тезис 1–2", "Тезис 3 и призыв"],
-    "genre": "Light electronic",
-    "bpm": 108,
-    "mood": "Собранно, ясно"
-  },
-  {
-    "id": "product-hold",
-    "title": "С продуктом в руках",
-    "category": "brand",
-    "seconds": 8,
-    "ratio": "1:1",
-    "blurb": "Вы показываете продукт, камера мягко приближается.",
-    "shots": ["Продукт на столе", "Вы берёте его в руки", "Улыбка и логотип"],
-    "genre": "Upbeat pop",
+    "people": 1,
+    "blurb": "Красная дорожка, вспышки и автограф.",
+    "shots": [
+      "Выход",
+      "Вспышки",
+      "Автограф",
+      "Взгляд в камеру"
+    ],
+    "genre": "Glam pop",
     "bpm": 112,
-    "mood": "Позитив, лёгкость"
+    "mood": "Гламур, успех"
   },
   {
-    "id": "coffee-brand",
-    "title": "Кофе и утро",
-    "category": "brand",
-    "seconds": 10,
-    "ratio": "9:16",
-    "blurb": "Атмосфера кофейни для личного бренда.",
-    "shots": ["Пар над чашкой", "Вы у стойки", "Тёплый портрет"],
-    "genre": "Jazzy lo-fi",
-    "bpm": 86,
-    "mood": "Уют, утро"
-  },
-  {
-    "id": "studio-bts",
-    "title": "За кадром",
-    "category": "brand",
-    "seconds": 12,
+    "id": "hero-landing",
+    "title": "Приземление героя",
+    "category": "trend",
+    "seconds": 19,
     "ratio": "16:9",
-    "blurb": "Рабочий процесс: кадры из студии.",
-    "shots": ["Свет и штатив", "Вы за работой", "Результат на экране"],
-    "genre": "Indie electronic",
-    "bpm": 102,
-    "mood": "Живо, творчески"
-  },
-  {
-    "id": "launch-day",
-    "title": "День запуска",
-    "category": "brand",
-    "seconds": 8,
-    "ratio": "9:16",
-    "blurb": "Анонс нового: цифры, жест, финальный кадр.",
-    "shots": ["Обратный отсчёт", "Выход в кадр", "Название и дата"],
-    "genre": "Driving electro",
-    "bpm": 128,
-    "mood": "Подъём, анонс"
-  },
-  {
-    "id": "study-evening",
-    "title": "Вечер в кабинете",
-    "category": "story",
-    "seconds": 12,
-    "ratio": "16:9",
-    "blurb": "Книги, лампа, тихая сцена как из фильма.",
-    "shots": ["Лампа и корешки книг", "Вы листаете страницу", "Взгляд в окно"],
-    "genre": "Cinematic piano",
-    "bpm": 72,
-    "mood": "Тихая задумчивость"
-  },
-  {
-    "id": "rain-window",
-    "title": "Дождь за стеклом",
-    "category": "story",
-    "seconds": 10,
-    "ratio": "9:16",
-    "blurb": "Капли, огни, вы у окна.",
-    "shots": ["Капли крупно", "Профиль у стекла", "Тёплый свет в комнате"],
-    "genre": "Lo-fi piano",
-    "bpm": 78,
-    "mood": "Грусть, уют"
-  },
-  {
-    "id": "hero-intro",
-    "title": "Выход героя",
-    "category": "story",
-    "seconds": 8,
-    "ratio": "16:9",
-    "blurb": "Кино-титры и шаг в свет.",
-    "shots": ["Тёмный коридор", "Шаг в свет", "Титр с именем"],
+    "people": 1,
+    "blurb": "Эффектное приземление, пыль и уход в закат.",
+    "shots": [
+      "Прыжок",
+      "Приземление",
+      "Подъём",
+      "Уход"
+    ],
     "genre": "Epic trailer",
     "bpm": 100,
-    "mood": "Мощь, пафос"
+    "mood": "Мощь, экшн"
   },
   {
-    "id": "letter-memory",
-    "title": "Письмо из памяти",
-    "category": "story",
-    "seconds": 12,
+    "id": "outfit-change",
+    "title": "Смена образа",
+    "category": "trend",
+    "seconds": 19,
     "ratio": "9:16",
-    "blurb": "Старые кадры, бумага, зерно.",
-    "shots": ["Конверт и свет", "Фото из прошлого", "Вы в кадре"],
-    "genre": "Emotional strings",
-    "bpm": 68,
-    "mood": "Ностальгия"
+    "people": 1,
+    "blurb": "Поворот — и новый образ: от худи к вечернему наряду.",
+    "shots": [
+      "Обычный образ",
+      "Вспышка",
+      "Новый образ",
+      "Поза"
+    ],
+    "genre": "Electro pop",
+    "bpm": 126,
+    "mood": "Вау, трансформация"
   },
   {
-    "id": "space-walk",
-    "title": "Прогулка в космосе",
-    "category": "story",
-    "seconds": 10,
+    "id": "golden-field",
+    "title": "Золотой час",
+    "category": "trend",
+    "seconds": 19,
+    "ratio": "9:16",
+    "people": 1,
+    "blurb": "Пшеничное поле, контровой свет и лёгкость.",
+    "shots": [
+      "В поле",
+      "Поворот",
+      "Кружится",
+      "Портрет"
+    ],
+    "genre": "Acoustic indie",
+    "bpm": 96,
+    "mood": "Тепло, нежность"
+  },
+  {
+    "id": "moto-trip",
+    "title": "Путешествие на мотоцикле",
+    "category": "trend",
+    "seconds": 19,
     "ratio": "16:9",
-    "blurb": "Фантазия: вы среди звёзд.",
-    "shots": ["Звёзды и пыль", "Вы в невесомости", "Планета за спиной"],
-    "genre": "Space ambient",
-    "bpm": 70,
-    "mood": "Масштаб, чудо"
+    "people": 1,
+    "blurb": "Мотоцикл, серпантин и вид с обрыва.",
+    "shots": [
+      "Старт",
+      "В пути",
+      "Обрыв",
+      "Закат"
+    ],
+    "genre": "Blues rock",
+    "bpm": 104,
+    "mood": "Дорога, свобода"
   },
   {
-    "id": "spy-night",
-    "title": "Шпионская ночь",
-    "category": "story",
-    "seconds": 8,
+    "id": "yacht-party",
+    "title": "Вечеринка на яхте",
+    "category": "trend",
+    "seconds": 19,
+    "ratio": "16:9",
+    "people": 1,
+    "blurb": "Яхта, море, музыка и брызги.",
+    "shots": [
+      "На палубе",
+      "Танец",
+      "Нос яхты",
+      "Закат"
+    ],
+    "genre": "Tropical house",
+    "bpm": 114,
+    "mood": "Лето, роскошь"
+  },
+  {
+    "id": "kpop-stage",
+    "title": "Неоновый K-pop",
+    "category": "trend",
+    "seconds": 19,
     "ratio": "9:16",
-    "blurb": "Тени, неон, быстрая смена кадров.",
-    "shots": ["Переулок в тенях", "Быстрый шаг", "Стоп-кадр"],
-    "genre": "Dark electro",
-    "bpm": 122,
-    "mood": "Напряжение"
+    "people": 1,
+    "blurb": "Сцена, лазеры и хореография айдола.",
+    "shots": [
+      "На сцене",
+      "Хореография",
+      "Камера ближе",
+      "Финал"
+    ],
+    "genre": "K-pop",
+    "bpm": 128,
+    "mood": "Сцена, драйв"
+  },
+  {
+    "id": "paris-umbrella",
+    "title": "Париж под дождём",
+    "category": "story",
+    "seconds": 19,
+    "ratio": "9:16",
+    "people": 1,
+    "blurb": "Зонт, мостовая, Эйфелева башня и улыбка.",
+    "shots": [
+      "Дождь",
+      "Кружение",
+      "Кафе",
+      "Солнце"
+    ],
+    "genre": "French jazz",
+    "bpm": 96,
+    "mood": "Романтика, город"
+  },
+  {
+    "id": "snow-fairytale",
+    "title": "Снежная сказка",
+    "category": "party",
+    "seconds": 19,
+    "ratio": "9:16",
+    "people": 1,
+    "blurb": "Снег, варежки, снежки и тёплый смех.",
+    "shots": [
+      "Снегопад",
+      "Снежок",
+      "Снежный ангел",
+      "Какао"
+    ],
+    "genre": "Festive acoustic",
+    "bpm": 100,
+    "mood": "Зима, уют"
+  },
+  {
+    "id": "new-year-magic",
+    "title": "Новогоднее чудо",
+    "category": "party",
+    "seconds": 19,
+    "ratio": "9:16",
+    "people": 1,
+    "blurb": "Бенгальские огни, ёлка и салют за окном.",
+    "shots": [
+      "Ёлка",
+      "Огоньки",
+      "Подарок",
+      "Салют"
+    ],
+    "genre": "Festive electro",
+    "bpm": 116,
+    "mood": "Праздник, чудо"
   },
   {
     "id": "birthday-glow",
     "title": "День рождения",
     "category": "party",
-    "seconds": 8,
+    "seconds": 19,
     "ratio": "9:16",
-    "blurb": "Свечи, конфетти, тёплый портрет.",
-    "shots": ["Свечи на торте", "Вы задуваете их", "Конфетти"],
+    "people": 1,
+    "blurb": "Свечи, желание, конфетти и шары.",
+    "shots": [
+      "Свечи",
+      "Конфетти",
+      "Шары",
+      "Подарок"
+    ],
     "genre": "Feel-good pop",
     "bpm": 118,
     "mood": "Радость"
   },
   {
-    "id": "new-year",
-    "title": "Новый год",
+    "id": "halloween-night",
+    "title": "Хэллоуин",
     "category": "party",
-    "seconds": 10,
+    "seconds": 19,
     "ratio": "9:16",
-    "blurb": "Гирлянды, искры, зимний вечер.",
-    "shots": ["Огни ёлки", "Вы с бокалом", "Салют в окне"],
-    "genre": "Festive electro",
-    "bpm": 116,
-    "mood": "Праздник, тепло"
-  },
-  {
-    "id": "wedding-toast",
-    "title": "Тост на свадьбе",
-    "category": "party",
-    "seconds": 10,
-    "ratio": "16:9",
-    "blurb": "Свет, смех, поднятый бокал.",
-    "shots": ["Зал в огнях", "Вы поднимаете бокал", "Объятие"],
-    "genre": "Romantic pop",
-    "bpm": 92,
-    "mood": "Нежность"
-  },
-  {
-    "id": "summer-party",
-    "title": "Летняя вечеринка",
-    "category": "party",
-    "seconds": 8,
-    "ratio": "9:16",
-    "blurb": "Закат, гирлянды, танец.",
-    "shots": ["Закат над террасой", "Шаг в танец", "Смех крупно"],
-    "genre": "Tropical house",
-    "bpm": 114,
-    "mood": "Лето, драйв"
+    "people": 1,
+    "blurb": "Тыквы, туман и немного магии.",
+    "shots": [
+      "Тыквы",
+      "Фонарь",
+      "Магия",
+      "Смех"
+    ],
+    "genre": "Spooky electro",
+    "bpm": 108,
+    "mood": "Загадка, веселье"
   },
   {
     "id": "graduation",
     "title": "Выпускной",
     "category": "party",
-    "seconds": 8,
+    "seconds": 19,
     "ratio": "1:1",
-    "blurb": "Мантия, шляпа, бросок вверх.",
-    "shots": ["Аудитория", "Вы в мантии", "Шляпы вверх"],
+    "people": 1,
+    "blurb": "Мантия, диплом и шляпы в воздух.",
+    "shots": [
+      "Диплом",
+      "Шляпа",
+      "Шляпы летят",
+      "Фото"
+    ],
     "genre": "Uplifting pop",
     "bpm": 120,
     "mood": "Гордость"
   },
   {
-    "id": "family-day",
-    "title": "Семейный день",
-    "category": "party",
-    "seconds": 10,
+    "id": "spy-night",
+    "title": "Шпионская ночь",
+    "category": "story",
+    "seconds": 19,
+    "ratio": "9:16",
+    "people": 1,
+    "blurb": "Тени, неон и погоня — короткометражка.",
+    "shots": [
+      "Переулок",
+      "Звонок",
+      "Погоня",
+      "Ушёл"
+    ],
+    "genre": "Dark electro",
+    "bpm": 122,
+    "mood": "Напряжение"
+  },
+  {
+    "id": "space-walk",
+    "title": "Прогулка в космосе",
+    "category": "story",
+    "seconds": 19,
     "ratio": "16:9",
-    "blurb": "Тёплые кадры семейной прогулки.",
-    "shots": ["Парк и скамейка", "Вы со смехом", "Общий кадр"],
-    "genre": "Warm acoustic",
-    "bpm": 94,
-    "mood": "Тепло, семья"
+    "people": 1,
+    "blurb": "Невесомость, планета и звёзды.",
+    "shots": [
+      "Кабина",
+      "Невесомость",
+      "Выход",
+      "Взгляд"
+    ],
+    "genre": "Space ambient",
+    "bpm": 70,
+    "mood": "Масштаб, чудо"
+  },
+  {
+    "id": "hero-intro",
+    "title": "Выход героя",
+    "category": "story",
+    "seconds": 19,
+    "ratio": "16:9",
+    "people": 1,
+    "blurb": "Тёмный коридор, свет и кино-титр.",
+    "shots": [
+      "Тень",
+      "Шаг в свет",
+      "Взгляд",
+      "Финал"
+    ],
+    "genre": "Epic trailer",
+    "bpm": 100,
+    "mood": "Мощь"
+  },
+  {
+    "id": "letter-memory",
+    "title": "Письмо из памяти",
+    "category": "story",
+    "seconds": 19,
+    "ratio": "9:16",
+    "people": 1,
+    "blurb": "Старое письмо, фотография и тёплое воспоминание.",
+    "shots": [
+      "Конверт",
+      "Читает",
+      "Фотография",
+      "Улыбка"
+    ],
+    "genre": "Emotional strings",
+    "bpm": 68,
+    "mood": "Ностальгия"
+  },
+  {
+    "id": "coffee-morning",
+    "title": "Утро у моря",
+    "category": "story",
+    "seconds": 19,
+    "ratio": "9:16",
+    "people": 1,
+    "blurb": "Терраса, кофе, ветер и солнце.",
+    "shots": [
+      "Кофе",
+      "Ветер",
+      "Потягивается",
+      "Взгляд"
+    ],
+    "genre": "Lo-fi chill",
+    "bpm": 86,
+    "mood": "Утро, покой"
+  },
+  {
+    "id": "magazine-cover",
+    "title": "Обложка журнала",
+    "category": "style",
+    "seconds": 19,
+    "ratio": "9:16",
+    "people": 1,
+    "blurb": "Студийные вспышки и позы как на обложку.",
+    "shots": [
+      "Поза 1",
+      "Поза 2",
+      "Ветер",
+      "Обложка"
+    ],
+    "genre": "Minimal techno",
+    "bpm": 124,
+    "mood": "Fashion, уверенность"
+  },
+  {
+    "id": "studio-bts",
+    "title": "За кадром",
+    "category": "brand",
+    "seconds": 19,
+    "ratio": "16:9",
+    "people": 1,
+    "blurb": "Рабочий процесс, свет и результат на экране.",
+    "shots": [
+      "Свет",
+      "Работа",
+      "Результат",
+      "Портрет"
+    ],
+    "genre": "Indie electronic",
+    "bpm": 102,
+    "mood": "Творчество"
+  },
+  {
+    "id": "pro-intro",
+    "title": "Деловое приветствие",
+    "category": "brand",
+    "seconds": 19,
+    "ratio": "16:9",
+    "people": 1,
+    "blurb": "Видео для сайта и профиля: офис, кивок, уверенность.",
+    "shots": [
+      "Офис",
+      "Приветствие",
+      "Работа",
+      "Кивок"
+    ],
+    "genre": "Corporate uplift",
+    "bpm": 110,
+    "mood": "Уверенность"
+  },
+  {
+    "id": "coffee-brand",
+    "title": "Кофе и утро",
+    "category": "brand",
+    "seconds": 19,
+    "ratio": "9:16",
+    "people": 1,
+    "blurb": "Кофейня, латте-арт и тёплый портрет.",
+    "shots": [
+      "Бариста",
+      "Латте-арт",
+      "Первый глоток",
+      "Улыбка"
+    ],
+    "genre": "Jazzy lo-fi",
+    "bpm": 86,
+    "mood": "Уют"
+  },
+  {
+    "id": "couple-hug",
+    "title": "Объятия",
+    "category": "couple",
+    "seconds": 19,
+    "ratio": "9:16",
+    "people": 2,
+    "blurb": "Встреча, объятия и кружение — для пары или друзей.",
+    "shots": [
+      "Встреча",
+      "Объятия",
+      "Кружение",
+      "Вдвоём"
+    ],
+    "genre": "Romantic pop",
+    "bpm": 92,
+    "mood": "Тепло, близость"
+  },
+  {
+    "id": "first-dance",
+    "title": "Первый танец",
+    "category": "couple",
+    "seconds": 19,
+    "ratio": "16:9",
+    "people": 2,
+    "blurb": "Свадебный зал, свет и танец двоих.",
+    "shots": [
+      "Приглашение",
+      "Вальс",
+      "Поворот",
+      "Финал"
+    ],
+    "genre": "Romantic strings",
+    "bpm": 76,
+    "mood": "Нежность"
+  },
+  {
+    "id": "rain-umbrella-couple",
+    "title": "Под одним зонтом",
+    "category": "couple",
+    "seconds": 19,
+    "ratio": "9:16",
+    "people": 2,
+    "blurb": "Внезапный дождь, один зонт на двоих.",
+    "shots": [
+      "Дождь",
+      "Зонт",
+      "Лужи",
+      "Вдвоём"
+    ],
+    "genre": "Acoustic pop",
+    "bpm": 98,
+    "mood": "Романтика"
+  },
+  {
+    "id": "cooking-together",
+    "title": "Готовим вместе",
+    "category": "couple",
+    "seconds": 19,
+    "ratio": "16:9",
+    "people": 2,
+    "blurb": "Кухня, мука в воздухе и смех.",
+    "shots": [
+      "Тесто",
+      "Мука",
+      "Пицца",
+      "Дегустация"
+    ],
+    "genre": "Funk pop",
+    "bpm": 112,
+    "mood": "Веселье"
+  },
+  {
+    "id": "ferris-wheel",
+    "title": "Колесо обозрения",
+    "category": "couple",
+    "seconds": 19,
+    "ratio": "9:16",
+    "people": 2,
+    "blurb": "Закат, кабинка и город внизу.",
+    "shots": [
+      "Кабинка",
+      "Селфи",
+      "Вид",
+      "Вдвоём"
+    ],
+    "genre": "Indie pop",
+    "bpm": 104,
+    "mood": "Лето, радость"
+  },
+  {
+    "id": "toast-together",
+    "title": "Тост за нас",
+    "category": "couple",
+    "seconds": 19,
+    "ratio": "16:9",
+    "people": 2,
+    "blurb": "Ресторан, свечи и звон бокалов.",
+    "shots": [
+      "Столик",
+      "Тост",
+      "Смех",
+      "В камеру"
+    ],
+    "genre": "Lounge jazz",
+    "bpm": 90,
+    "mood": "Праздник вдвоём"
+  },
+  {
+    "id": "beach-sunset-couple",
+    "title": "Закат на пляже",
+    "category": "couple",
+    "seconds": 19,
+    "ratio": "16:9",
+    "people": 2,
+    "blurb": "Бег по волнам, брызги и солнце.",
+    "shots": [
+      "Берег",
+      "Бег",
+      "Брызги",
+      "Закат"
+    ],
+    "genre": "Tropical house",
+    "bpm": 112,
+    "mood": "Лето, свобода"
+  },
+  {
+    "id": "best-friends",
+    "title": "Лучшие друзья",
+    "category": "couple",
+    "seconds": 19,
+    "ratio": "9:16",
+    "people": 2,
+    "blurb": "Хай-файв, смех и селфи для двоих друзей.",
+    "shots": [
+      "Встреча",
+      "Танец",
+      "Мороженое",
+      "Селфи"
+    ],
+    "genre": "Pop punk",
+    "bpm": 128,
+    "mood": "Дружба, драйв"
   }
 ]

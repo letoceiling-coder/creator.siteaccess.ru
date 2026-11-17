@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
- * Демо-ролики 30 видеошаблонов, формат v3 — как у съёмочной группы, тот же, что получает
+ * Демо-ролики видеошаблонов, формат v4: сюжеты из stories.mjs — как у съёмочной группы, тот же, что получает
  * пользователь: четыре плана (общий, средний, крупный, финал) с одним и тем же вымышленным
  * героем, апскейл ×2 и 32 кадра/с, переходы и музыка шаблона, ≈19 с.
  * Контроль качества: лицо видно целиком на каждом кадре и в 80% кадров каждого клипа,
  * иначе пересъёмка с другим сидом (до трёх попыток).
  *
- *   node videos.mjs run [--limit N] [--only id]   пересобрать то, что ещё не v3
+ *   node videos.mjs run [--limit N] [--only id]   пересобрать то, что ещё не v4
  *   node videos.mjs previews                      превью 6 с для карточек каталога
  *   node videos.mjs status
  *
@@ -18,7 +18,7 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { faceVisible, negative, videoPlan } from '../api/presets.mjs'
 import { assembleShots } from './assemble.mjs'
-import { imageHasFace, MIN_FACE_RATIO, videoFaceRatio } from './faces.mjs'
+import { imageHasFace, MIN_FACE_RATIO, MIN_PAIR_RATIO, videoFaceRatio } from './faces.mjs'
 import {
   download,
   qwenEditWorkflow,
@@ -27,9 +27,9 @@ import {
   uploadImage,
   wanVideoWorkflow,
 } from './comfy.mjs'
-import { scenes } from './video-scenes.mjs'
+import { stories } from './stories.mjs'
 
-const VERSION = 3
+const VERSION = 4
 const MIN_MUSIC_SECONDS = 22
 
 const templates = JSON.parse(
@@ -60,7 +60,8 @@ function save() {
 function musicReady(id) {
   try {
     const music = JSON.parse(readFileSync(`${musicDir}/state.json`, 'utf8'))
-    return (music.done?.[id]?.seconds ?? 0) >= MIN_MUSIC_SECONDS
+    const track = music.done?.[id]
+    return (track?.seconds ?? 0) >= MIN_MUSIC_SECONDS && track?.version === 2
   } catch {
     return false
   }
@@ -93,37 +94,43 @@ function preview(src, out) {
   ])
 }
 
-async function withFace(make, label) {
+async function withFace(make, label, minFaces = 1) {
   let first
   for (let attempt = 0; attempt < 3; attempt++) {
     const buf = await make(attempt)
     first ??= buf
-    if ((await imageHasFace(buf)).ok) return buf
+    if ((await imageHasFace(buf, minFaces)).ok) return buf
     console.log(`  ${label}: лицо не видно целиком, попытка ${attempt + 2}`)
   }
   return first
 }
 
 async function make(t, index) {
-  const plan = videoPlan(t.id, { outfit: 0 })
-  const scene = scenes[t.id]
+  const plan = videoPlan(t.id, { outfit: 0, pairFromOneImage: true })
+  const story = stories.find((x) => x.id === t.id)
+  const people = plan.people
+  const ratioNeeded = people > 1 ? MIN_PAIR_RATIO : MIN_FACE_RATIO
   const [first] = plan.shots
   const tag = `${t.id}-v${VERSION}`
 
   // 1. Герой: общий план по тексту. Он же — референс лица для остальных планов.
-  const hero = await withFace(async (attempt) => {
-    const files = await runWorkflow(
-      qwenImageWorkflow({
-        prompt: `${scene[0]}. ${first.still.prompt.split('. Subject:')[0]}. ${faceVisible} ${style}`,
-        negative: negativeStill,
-        width: first.still.width,
-        height: first.still.height,
-        seed: 9000 + index * 13 + attempt * 1009,
-        prefix: `creator/v3still-${t.id}-0`,
-      }),
-    )
-    return download(files[0])
-  }, `${t.id} герой`)
+  const hero = await withFace(
+    async (attempt) => {
+      const files = await runWorkflow(
+        qwenImageWorkflow({
+          prompt: `Cinematic film still: ${story.beats[0].still}. ${people > 1 ? `The two people are ${story.cast}` : `The person is ${story.cast}`}. ${people > 1 ? 'Both faces are clearly visible, both heads fully inside the frame.' : faceVisible} ${style}`,
+          negative: negativeStill,
+          width: first.still.width,
+          height: first.still.height,
+          seed: 9000 + index * 13 + attempt * 1009,
+          prefix: `creator/v4still-${t.id}-0`,
+        }),
+      )
+      return download(files[0])
+    },
+    `${t.id} герой`,
+    people,
+  )
   const heroName = await uploadImage(hero, `creator-${tag}-hero.png`)
   writeFileSync(`${work}/${tag}-hero.png`, hero)
 
@@ -142,12 +149,13 @@ async function make(t, index) {
               seed: shot.still.seed + index + attempt * 1009,
               width: shot.still.width,
               height: shot.still.height,
-              prefix: `creator/v3still-${t.id}-${i}`,
+              prefix: `creator/v4still-${t.id}-${i}`,
             }),
           )
           return download(files[0])
         },
         `${t.id} план ${i + 1}`,
+        people,
       ),
     )
   }
@@ -166,22 +174,22 @@ async function make(t, index) {
           width: shot.video.width,
           height: shot.video.height,
           seed: 3000 + index * 7 + i + attempt * 7919,
-          prefix: `creator/v3clip-${t.id}-${i}`,
+          prefix: `creator/v4clip-${t.id}-${i}`,
           finish: true,
         }),
         { timeoutMs: 2_400_000 },
       )
       const path = `${work}/${tag}-${i}-t${attempt}.mp4`
       writeFileSync(path, await download(files[0]))
-      const { ratio } = await videoFaceRatio(path)
+      const { ratio } = await videoFaceRatio(path, people)
       if (ratio > best.ratio) {
         if (best.path) rmSync(best.path, { force: true })
         best = { ratio, path }
       } else rmSync(path, { force: true })
-      if (ratio >= MIN_FACE_RATIO) break
+      if (ratio >= ratioNeeded) break
       console.log(`  ${t.id} клип ${i + 1}: лицо в ${Math.round(ratio * 100)}% кадров, пересъёмка`)
     }
-    if (best.ratio < MIN_FACE_RATIO)
+    if (best.ratio < ratioNeeded)
       console.log(`  ${t.id} клип ${i + 1}: лучший вариант ${Math.round(best.ratio * 100)}%`)
     clips.push(best.path)
   }
@@ -189,7 +197,7 @@ async function make(t, index) {
   // 4. Склейка, постер, превью, атомарная замена файлов.
   const next = `${work}/${tag}.mp4`
   const { total, withMusic } = await assembleShots(clips, `${musicDir}/${t.id}.mp3`, next)
-  const check = await videoFaceRatio(next)
+  const check = await videoFaceRatio(next, people)
   execFileSync('ffmpeg', [
     '-y',
     '-loglevel',

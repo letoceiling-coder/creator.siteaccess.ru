@@ -4,7 +4,7 @@
  *   node music.mjs run [--limit N] [--redo-short] | status
  *
  * Трек не короче MIN_SECONDS (22 с): видеошаблон из четырёх планов длится около 19 с.
- * --redo-short пересоздаёт треки, сделанные короче.
+ * --redo-short пересоздаёт треки, сделанные короче или в прежней версии звучания.
  */
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
@@ -27,8 +27,26 @@ const keys = {
   dark: ['A minor', 'D minor', 'E minor', 'C minor'],
 }
 
+/** Версия звучания: при её смене треки пересоздаются (--redo-short). */
+const MUSIC_VERSION = 2
+
+/**
+ * Захватывающий трек под сюжет: интригующее вступление, нарастание, цепляющий хук и яркая
+ * кульминация за 20 секунд, как у трендовых роликов. Жанр и настроение — из шаблона.
+ */
 function describe(t) {
-  return `${t.genre}, instrumental, ${t.mood}, modern production, clean mix, cinematic, background music for a short social video, no vocals`
+  return [
+    t.genre,
+    `${t.mood} mood`,
+    'instrumental, no vocals',
+    'captivating and intriguing from the first second',
+    'atmospheric attention-grabbing intro with a rising build-up',
+    'strong catchy melodic hook',
+    'powerful cinematic climax with a beat drop',
+    'punchy modern drums and deep bass',
+    'trending social media soundtrack',
+    'professional polished mix, wide stereo, high energy',
+  ].join(', ')
 }
 
 function save() {
@@ -72,7 +90,12 @@ async function make(t, index) {
   rmSync(tmp)
   // Замена файла атомарно: задачи, которые сейчас читают трек, не получат половину файла.
   renameSync(`${dir}/${t.id}.next.mp3`, `${dir}/${t.id}.mp3`)
-  state.done[t.id] = { src: `/media/music/${t.id}.mp3`, bpm: t.bpm, seconds }
+  state.done[t.id] = {
+    src: `/media/music/${t.id}.mp3`,
+    bpm: t.bpm,
+    seconds,
+    version: MUSIC_VERSION,
+  }
   save()
 }
 
@@ -84,7 +107,12 @@ if (cmd === 'status') {
 } else if (cmd === 'run') {
   const todo = templates
     .map((t, i) => [t, i])
-    .filter(([t]) => !state.done[t.id] || (redoShort && state.done[t.id].seconds < MIN_SECONDS))
+    .filter(
+      ([t]) =>
+        !state.done[t.id] ||
+        (redoShort &&
+          (state.done[t.id].seconds < MIN_SECONDS || state.done[t.id].version !== MUSIC_VERSION)),
+    )
     .slice(0, limit)
   console.log(`К работе: ${todo.length} треков`)
   let failed = 0

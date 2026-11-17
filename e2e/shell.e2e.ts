@@ -33,7 +33,7 @@ test.describe('platform shell', () => {
       '/max/photos/north',
       '/photos/north/create',
       '/video',
-      '/max/video/coast-run',
+      '/max/video/viral-dance',
     ]) {
       await page.goto(path, { waitUntil: 'domcontentloaded' })
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible()

@@ -5,11 +5,14 @@ import { AnimatePresence, motion } from 'motion/react'
 export function UploadSlot({
   src,
   index,
+  caption,
   onAdd,
   onRemove,
 }: {
   src?: string
   index: number
+  /** Подпись слота, например «Первый» для сюжета на двоих. */
+  caption?: string
   onAdd: () => void
   onRemove: () => void
 }) {
@@ -42,7 +45,11 @@ export function UploadSlot({
             key="empty"
             type="button"
             onClick={onAdd}
-            aria-label={`Добавить фото ${index + 1}`}
+            aria-label={
+              caption
+                ? `Добавить фото: ${caption.toLowerCase()} человек`
+                : `Добавить фото ${index + 1}`
+            }
             whileTap={{ scale: 0.95 }}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -52,7 +59,7 @@ export function UploadSlot({
             <span className="grid place-items-center gap-1">
               <Plus size={22} aria-hidden="true" />
               <span className="tracking-label text-[11px] uppercase tabular-nums">
-                {String(index + 1).padStart(2, '0')}
+                {caption ?? String(index + 1).padStart(2, '0')}
               </span>
             </span>
           </motion.button>

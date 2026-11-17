@@ -17,7 +17,7 @@ export interface Scenario {
   id: string
   title: string
   tag: string
-  category: Exclude<CategoryId, 'all'>
+  category: string
   frames: number
   cover: string
   gallery: string[]

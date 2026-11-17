@@ -23,7 +23,7 @@ before(async () => {
       MEDIA_DIR: dir,
       WORKER: 'off',
       FACE_CHECK: 'off',
-      MAX_DAILY: '4',
+      MAX_DAILY: '5',
     },
     stdio: 'ignore',
   })
@@ -85,7 +85,7 @@ test('принимает задачу и отдаёт её по токену', a
 })
 
 test('видеошаблон: четыре плана и склейка — девять шагов', async () => {
-  const res = await post(form({ kind: 'video', target: 'coast-run' }))
+  const res = await post(form({ kind: 'video', target: 'viral-dance' }))
   assert.equal(res.status, 201)
   const { id, token } = await res.json()
   const job = await (
@@ -115,6 +115,17 @@ test('оживление: одно фото, 5 или 10 секунд', async ()
   assert.equal((await post(form({ kind: 'animate', target: 'smile' }, [photo, photo]))).status, 400)
 })
 
+test('сюжет на двоих: ровно два фото', async () => {
+  assert.equal((await post(form({ kind: 'video', target: 'couple-hug' }))).status, 400)
+  const ok = await post(form({ kind: 'video', target: 'couple-hug' }, [photo, photo]))
+  assert.equal(ok.status, 201)
+  const { id, token } = await ok.json()
+  await fetch(`${base}/api/jobs/${id}/cancel`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}` },
+  })
+})
+
 test('отклоняет неверные запросы', async () => {
   assert.equal((await post(form({ consent: undefined }))).status, 400)
   assert.equal((await post(form({ target: 'unknown' }))).status, 404)
@@ -129,7 +140,7 @@ test('отклоняет неверные запросы', async () => {
 })
 
 test('дневной лимит на клиента', async () => {
-  // MAX_DAILY=4: три задачи уже созданы выше
+  // MAX_DAILY=5: четыре задачи уже созданы выше
   const a = await post(form({}))
   const tokenA = await a.json()
   const b = await post(form({}))

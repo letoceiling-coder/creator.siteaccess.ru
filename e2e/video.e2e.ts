@@ -10,7 +10,7 @@ async function withoutMedia(page: Page) {
 test.describe('video templates', () => {
   test('plays the storyboard preview and pauses it when there is no clip', async ({ page }) => {
     await withoutMedia(page)
-    await page.goto('/video/neon-roof', { waitUntil: 'domcontentloaded' })
+    await page.goto('/video/viral-dance', { waitUntil: 'domcontentloaded' })
     const seek = page.getByRole('slider', { name: 'Перемотка' })
     await expect(seek).toHaveValue('0')
     await page.getByRole('button', { name: 'Смотреть превью' }).click()
@@ -28,8 +28,8 @@ test.describe('video templates', () => {
       route.fulfill({
         contentType: 'application/json',
         body: JSON.stringify({
-          'neon-roof': {
-            src: '/media/video/neon-roof.mp4',
+          'viral-dance': {
+            src: '/media/video/viral-dance.mp4',
             poster: '',
             ratio: '9:16',
             seconds: 5,
@@ -41,8 +41,8 @@ test.describe('video templates', () => {
     await page.route('**/media/photos/manifest.json', (route) =>
       route.fulfill({ status: 404, body: 'not found' }),
     )
-    await page.goto('/video/neon-roof', { waitUntil: 'domcontentloaded' })
-    await expect(page.getByLabel('Демо-ролик «Крыша в неоне»')).toBeVisible()
+    await page.goto('/video/viral-dance', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByLabel('Демо-ролик «Вирусный танец»')).toBeVisible()
     await expect(page.getByText('Создано ИИ')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Включить звук' })).toBeVisible()
   })

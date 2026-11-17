@@ -14,8 +14,9 @@ const hostDir = process.env.QC_DIR ?? '/srv/comfyui/data/ComfyUI/output/creator-
 const containerDir = process.env.QC_CONTAINER_DIR ?? '/data/ComfyUI/output/creator-qc'
 const container = process.env.COMFY_CONTAINER ?? 'comfyui'
 
-/** Доля кадров ролика, где лицо должно быть видно целиком. */
+/** Доля кадров ролика, где лицо должно быть видно целиком (для пары — оба лица). */
 export const MIN_FACE_RATIO = 0.8
+export const MIN_PAIR_RATIO = 0.6
 
 function prepare() {
   mkdirSync(hostDir, { recursive: true })
@@ -23,7 +24,7 @@ function prepare() {
 }
 
 /** Проверка набора файлов. Возвращает результат по каждому файлу в порядке имён. */
-async function checkDir(fill) {
+async function checkDir(fill, minFaces = 1) {
   prepare()
   const name = randomBytes(6).toString('hex')
   const dir = join(hostDir, name)
@@ -38,6 +39,7 @@ async function checkDir(fill) {
         '/data/venv/bin/python',
         `${containerDir}/faces.py`,
         `${containerDir}/${name}`,
+        String(minFaces),
       ],
       { timeout: 120_000, maxBuffer: 4 * 1024 * 1024 },
     )
@@ -48,8 +50,11 @@ async function checkDir(fill) {
 }
 
 /** Лицо на изображении видно целиком? */
-export async function imageHasFace(buffer) {
-  const [result] = await checkDir(async (dir) => writeFileSync(join(dir, 'image.png'), buffer))
+export async function imageHasFace(buffer, minFaces = 1) {
+  const [result] = await checkDir(
+    async (dir) => writeFileSync(join(dir, 'image.png'), buffer),
+    minFaces,
+  )
   return result ?? { ok: false, reason: 'no_result' }
 }
 
@@ -61,7 +66,7 @@ export async function filesHaveFaces(paths) {
 }
 
 /** Доля кадров ролика (2 кадра в секунду), где лицо видно целиком. */
-export async function videoFaceRatio(video) {
+export async function videoFaceRatio(video, minFaces = 1) {
   const results = await checkDir(async (dir) => {
     await run(
       'ffmpeg',
@@ -77,7 +82,7 @@ export async function videoFaceRatio(video) {
       ],
       { timeout: 120_000 },
     )
-  })
+  }, minFaces)
   if (!results.length) return { ratio: 0, frames: 0, bad: [] }
   const good = results.filter((r) => r.ok).length
   return {

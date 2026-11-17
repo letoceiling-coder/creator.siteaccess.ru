@@ -36,6 +36,10 @@ export interface CreateTarget {
   /** «5 кадров», «ролик 5 с» */
   output: string
   eta: string
+  /** 2 — сюжет на двоих: по одному фото каждого человека. */
+  people?: 1 | 2
+  /** Сцены сценария для показа в мастере. */
+  script?: string[]
 }
 
 function Label({ children }: { children: string }) {
@@ -154,7 +158,8 @@ export function WizardScreen({
   onBack: () => void
 }) {
   const animate = target.kind === 'animate'
-  const slots = animate ? 1 : 3
+  const pair = target.people === 2
+  const slots = animate ? 1 : pair ? 2 : 3
   const [step, setStep] = useState(0)
   const [photos, setPhotos] = useState<(Picked | undefined)[]>(() =>
     Array.from({ length: slots }, () => undefined),
@@ -236,11 +241,14 @@ export function WizardScreen({
     }
   }
 
-  const canNext = step === 0 ? count > 0 : step === 2 ? consent && !sending : true
+  const canNext = step === 0 ? count >= (pair ? 2 : 1) : step === 2 ? consent && !sending : true
 
   return (
     <div className="mx-auto grid max-w-xl gap-6 px-4 pt-4 md:px-6">
-      <StepRail step={step} names={['Фото', animate ? 'Движение' : 'Образ', 'Проверка']} />
+      <StepRail
+        step={step}
+        names={['Фото', animate ? 'Движение' : pair ? 'Сценарий' : 'Образ', 'Проверка']}
+      />
       <input
         ref={input}
         type="file"
@@ -264,9 +272,11 @@ export function WizardScreen({
               <div className="grid gap-2">
                 <h1 className="font-display text-title text-ink text-[1.75rem]">Ваши фото</h1>
                 <p className="text-body text-ink-muted">
-                  {animate
-                    ? 'Один снимок, который нужно оживить. Подойдут и старые фото, переснятые на телефон. Лицо должно быть различимо.'
-                    : 'От одного до трёх снимков. Лицо хорошо видно, без сильных фильтров, очков и перекрытий. Лучше разные ракурсы.'}
+                  {pair
+                    ? 'Два фото: первое — первый человек, второе — второй. На каждом одно лицо, хорошо видно и не закрыто.'
+                    : animate
+                      ? 'Один снимок, который нужно оживить. Подойдут и старые фото, переснятые на телефон. Лицо должно быть различимо.'
+                      : 'От одного до трёх снимков. Лицо хорошо видно, без сильных фильтров, очков и перекрытий. Лучше разные ракурсы.'}
                 </p>
               </div>
               <div className="grid grid-cols-3 gap-2">
@@ -275,6 +285,7 @@ export function WizardScreen({
                     key={i}
                     index={i}
                     src={p?.url}
+                    caption={pair ? (i === 0 ? 'Первый' : 'Второй') : undefined}
                     onAdd={() => input.current?.click()}
                     onRemove={() => remove(i)}
                   />
@@ -314,7 +325,27 @@ export function WizardScreen({
             </>
           ) : null}
 
-          {step === 1 && !animate ? (
+          {step === 1 && pair ? (
+            <>
+              <h1 className="font-display text-title text-ink text-[1.75rem]">Сценарий</h1>
+              <ol className="grid gap-2">
+                {(target.script ?? []).map((scene, i) => (
+                  <li
+                    key={scene}
+                    className="chamfer-sm bg-canvas-raised text-ink flex min-h-12 items-center gap-3 px-4"
+                  >
+                    <span className="text-accent font-display tabular-nums">0{i + 1}</span>
+                    {scene}
+                  </li>
+                ))}
+              </ol>
+              <p className="text-caption text-ink-muted">
+                Образы и место действия заданы сюжетом. Оба человека будут в каждой сцене.
+              </p>
+            </>
+          ) : null}
+
+          {step === 1 && !animate && !pair ? (
             <>
               <h1 className="font-display text-title text-ink text-[1.75rem]">Образ</h1>
               <div className="grid gap-2">
@@ -375,7 +406,7 @@ export function WizardScreen({
                         ['Ожидание', duration === 10 ? 'около 4 минут' : 'около 2 минут'],
                       ]
                     : [
-                        ['Одежда', outfits[outfit] ?? ''],
+                        ...(pair ? [] : [['Одежда', outfits[outfit] ?? '']]),
                         ...(target.kind === 'photo'
                           ? [['Время', times.find((t) => t.id === time)?.label ?? '']]
                           : []),
@@ -390,7 +421,11 @@ export function WizardScreen({
                 </dl>
               </div>
               <Checkbox
-                label="Это мои фото или у меня есть согласие человека на снимках. Я согласен на их обработку для создания результата."
+                label={
+                  pair
+                    ? 'На фото я и человек, который согласен на этот ролик. Мы оба согласны на обработку фото.'
+                    : 'Это мои фото или у меня есть согласие человека на снимках. Я согласен на их обработку для создания результата.'
+                }
                 checked={consent}
                 onChange={(e) => setConsent(e.target.checked)}
               />
