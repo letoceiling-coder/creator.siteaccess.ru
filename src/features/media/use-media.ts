@@ -33,7 +33,7 @@ let cache: Promise<Media> | undefined
 
 async function getJson<T>(url: string): Promise<T | undefined> {
   try {
-    const res = await fetch(url)
+    const res = await fetch(url, { cache: 'no-cache' })
     if (!res.ok || !res.headers.get('content-type')?.includes('json')) return undefined
     return (await res.json()) as T
   } catch {
