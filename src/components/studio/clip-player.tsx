@@ -1,18 +1,15 @@
 import { Pause, Play, Volume2, VolumeX } from 'lucide-react'
 import { useRef, useState } from 'react'
+import { useInViewAutoplay } from '@/hooks/use-in-view-autoplay.ts'
 import type { VideoClip } from '@/features/media/use-media.ts'
+import { frameStyle } from './frame-style.ts'
 
-const ratioStyle: Record<VideoClip['ratio'], string> = {
-  '9:16': '9 / 16',
-  '16:9': '16 / 9',
-  '1:1': '1 / 1',
-}
-
-/** Плеер готового ролика: постер, пауза, звук. Звук включается только по нажатию. */
+/** Плеер готового ролика: стартует сам без звука, звук — по кнопке. */
 export function ClipPlayer({ clip, title }: { clip: VideoClip; title: string }) {
   const ref = useRef<HTMLVideoElement>(null)
   const [playing, setPlaying] = useState(false)
-  const [muted, setMuted] = useState(false)
+  const [muted, setMuted] = useState(true)
+  useInViewAutoplay(ref)
 
   function toggle() {
     const video = ref.current
@@ -25,7 +22,7 @@ export function ClipPlayer({ clip, title }: { clip: VideoClip; title: string }) 
     <div className="grid gap-3">
       <div
         className="chamfer grain bg-canvas-sunken relative mx-auto w-full overflow-hidden"
-        style={{ aspectRatio: ratioStyle[clip.ratio], maxHeight: '68dvh' }}
+        style={frameStyle(clip.ratio)}
       >
         <video
           ref={ref}
@@ -36,7 +33,7 @@ export function ClipPlayer({ clip, title }: { clip: VideoClip; title: string }) 
           preload="metadata"
           muted={muted}
           aria-label={`Демо-ролик «${title}»`}
-          className="absolute inset-0 size-full object-cover"
+          className="absolute inset-0 size-full object-contain"
           onPlay={() => setPlaying(true)}
           onPause={() => setPlaying(false)}
           onClick={toggle}

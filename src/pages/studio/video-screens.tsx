@@ -14,6 +14,8 @@ import {
 } from '@/features/catalog/video-data.ts'
 import { videoTemplates } from '@/features/catalog/video-data.ts'
 import { useMedia } from '@/features/media/use-media.ts'
+import { usePaged } from '@/hooks/use-paged.ts'
+import { MoreButton } from '@/components/studio/more-button.tsx'
 import { cn } from '@/shared/cn.ts'
 
 function Label({ children }: { children: string }) {
@@ -40,6 +42,7 @@ export function VideoCatalogScreen({
     () => videoTemplates.filter((v) => category === 'all' || v.category === category),
     [category],
   )
+  const page = usePaged(list, 10)
   return (
     <div className="grid gap-5 px-4 pt-6 md:px-6">
       <div className="grid gap-2">
@@ -47,7 +50,7 @@ export function VideoCatalogScreen({
         <h1 className="font-display text-title text-ink text-[2rem]">Видеошаблоны</h1>
         <p className="text-body text-ink-muted max-w-xl">
           {videoTemplates.length} шаблонов. Ваш ролик снимается как у съёмочной группы: общий,
-          средний и крупный план с движением камеры, переходы и музыка — около 14 секунд.
+          средний, крупный план и финал с движением камеры, переходы и музыка — около 19 секунд.
         </p>
       </div>
       <button
@@ -74,7 +77,7 @@ export function VideoCatalogScreen({
       />
       <motion.div layout className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-5 lg:grid-cols-5">
         <AnimatePresence mode="popLayout">
-          {list.map((v, i) => (
+          {page.visible.map((v, i) => (
             <motion.div
               key={v.id}
               layout
@@ -86,16 +89,24 @@ export function VideoCatalogScreen({
               <PosterCard
                 index={i}
                 title={v.title}
-                tag={`≈14 с · ${v.ratio}`}
-                frames={v.shots.length}
+                tag={`≈19 с · ${v.ratio}`}
+                frames={4}
                 unit="плана"
                 src={media.videos[v.id]?.poster ?? v.cover}
+                video={media.videos[v.id]?.preview}
                 onOpen={() => onOpen(v.id)}
               />
             </motion.div>
           ))}
         </AnimatePresence>
       </motion.div>
+      <MoreButton
+        shown={page.visible.length}
+        total={page.total}
+        left={page.left}
+        step={10}
+        onMore={page.more}
+      />
     </div>
   )
 }
@@ -154,7 +165,7 @@ export function VideoDetailScreen({
 
         <dl className="border-line grid grid-cols-3 border-y py-4 text-center">
           {[
-            ['Ролик', '≈14 с'],
+            ['Ролик', '≈19 с'],
             ['Формат', template.ratio],
             ['Фото', '1–3'],
           ].map(([term, value]) => (

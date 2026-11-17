@@ -47,34 +47,48 @@ export function photoPlan(target, options) {
     width: 1104,
     height: 1472,
     seed: 70_000 + i * 97,
-    prompt: `${shot.camera}. Subject: the person from the reference photos${outfit ? `, ${outfit}` : ''}, ${shot.pose}. Location: ${loc.scene}. Light: ${light}. Palette: ${loc.palette}. ${identity} ${camera}.`,
+    prompt: `${shot.camera}. Subject: the person from the reference photos${outfit ? `, ${outfit}` : ''}, ${shot.pose}. Location: ${loc.scene}. Light: ${light}. Palette: ${loc.palette}. ${faceVisible} ${identity} ${camera}.`,
   }))
 }
 
 /**
- * Видеошаблон как работа съёмочной группы: три плана с разной оптикой и движением камеры,
- * склейка с переходами и музыкой — ролик около 14 секунд.
+ * Видеошаблон как работа съёмочной группы: четыре плана с разной оптикой и движением камеры,
+ * склейка с переходами и музыкой — ролик около 19 секунд (не меньше 15).
  */
 const videoShots = [
   {
     name: 'Общий план',
     frame:
-      'Wide establishing cinematic frame, 24mm lens, full body, the person walks naturally through the environment, arms relaxed',
+      'Wide establishing cinematic frame, 24mm lens, full body, the person walks naturally through the environment toward the camera, arms relaxed',
     move: 'smooth slow dolly-in establishing camera move',
+    withScene: true,
   },
   {
     name: 'Средний план',
     frame:
       'Medium shot from a three-quarter angle, 50mm lens, waist-up, one hand in a pocket, head turned toward the camera',
     move: 'slow cinematic orbit around the person, parallax in the background',
+    withScene: true,
   },
   {
     name: 'Крупный план',
     frame:
       'Head-and-shoulders portrait cropped at mid-chest, 85mm lens, shallow depth of field, natural anatomical proportions, hands are not visible',
     move: 'very slow push-in on the face, the person blinks and gives a subtle warm smile into the camera, hands stay out of frame',
+    withScene: false,
+  },
+  {
+    name: 'Финал',
+    frame:
+      'Medium-full shot, 35mm lens, the person stands facing the camera with a natural confident smile, the location visible around them',
+    move: 'slow crane pull-back revealing the location, the person keeps looking toward the camera and smiles',
+    withScene: false,
   },
 ]
+
+/** Лицо целиком в кадре: без этого ролик и фото отбраковываются проверкой. */
+export const faceVisible =
+  'The face is clearly visible and turned toward the camera, the whole head is fully inside the frame with headroom above it.'
 
 export function videoPlan(target, options) {
   const template = templates.find((t) => t.id === target)
@@ -90,13 +104,13 @@ export function videoPlan(target, options) {
         width: sz.still[0],
         height: sz.still[1],
         seed: 81_000 + i * 131,
-        prompt: `${shot.frame}. Subject: the person from the reference photos as the main character${outfit ? `, ${outfit}` : ''}. Scene: ${scene[0]}. ${identity} ${style}`,
+        prompt: `${shot.frame}. Subject: the person from the reference photos as the main character${outfit ? `, ${outfit}` : ''}. Scene: ${scene[0]}. ${faceVisible} ${identity} ${style}`,
       },
       video: {
         width: sz.video[0],
         height: sz.video[1],
         seed: 82_000 + i * 17,
-        prompt: `${i === 2 ? shot.move : `${scene[1]}, ${shot.move}`}, cinematic, natural motion, the face stays consistent`,
+        prompt: `${shot.withScene ? `${scene[1]}, ${shot.move}` : shot.move}, cinematic, natural motion, the face stays visible, consistent and inside the frame`,
       },
     })),
   }

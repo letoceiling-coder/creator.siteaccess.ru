@@ -22,6 +22,7 @@ before(async () => {
       DATA_DIR: dir,
       MEDIA_DIR: dir,
       WORKER: 'off',
+      FACE_CHECK: 'off',
       MAX_DAILY: '4',
     },
     stdio: 'ignore',
@@ -83,14 +84,14 @@ test('принимает задачу и отдаёт её по токену', a
   assert.equal(cancelled.status, 'cancelled')
 })
 
-test('видеошаблон: три плана и склейка — семь шагов', async () => {
+test('видеошаблон: четыре плана и склейка — девять шагов', async () => {
   const res = await post(form({ kind: 'video', target: 'coast-run' }))
   assert.equal(res.status, 201)
   const { id, token } = await res.json()
   const job = await (
     await fetch(`${base}/api/jobs/${id}`, { headers: { authorization: `Bearer ${token}` } })
   ).json()
-  assert.equal(job.total, 7)
+  assert.equal(job.total, 9)
   await fetch(`${base}/api/jobs/${id}/cancel`, {
     method: 'POST',
     headers: { authorization: `Bearer ${token}` },

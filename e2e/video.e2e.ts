@@ -42,8 +42,8 @@ test.describe('video templates', () => {
       route.fulfill({ status: 404, body: 'not found' }),
     )
     await page.goto('/video/neon-roof', { waitUntil: 'domcontentloaded' })
-    await expect(page.getByRole('button', { name: 'Смотреть ролик' })).toBeVisible()
+    await expect(page.getByLabel('Демо-ролик «Крыша в неоне»')).toBeVisible()
     await expect(page.getByText('Создано ИИ')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Выключить звук' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Включить звук' })).toBeVisible()
   })
 })

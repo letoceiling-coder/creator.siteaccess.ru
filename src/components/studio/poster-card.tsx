@@ -1,5 +1,6 @@
 import { motion, useMotionTemplate, useMotionValue, useSpring } from 'motion/react'
-import type { PointerEvent } from 'react'
+import { useRef, type PointerEvent } from 'react'
+import { useInViewAutoplay } from '@/hooks/use-in-view-autoplay.ts'
 import { cn } from '@/shared/cn.ts'
 
 /** Афиша сценария: наклон за пальцем, метки видоискателя, счётчик кадров. */
@@ -9,6 +10,7 @@ export function PosterCard({
   frames,
   unit = 'кадров',
   src,
+  video,
   index,
   onOpen,
   className,
@@ -18,10 +20,14 @@ export function PosterCard({
   frames: number
   unit?: string
   src: string
+  /** Короткое превью без звука: играет само, пока карточка на экране. */
+  video?: string
   index: number
   onOpen: () => void
   className?: string
 }) {
+  const videoRef = useRef<HTMLVideoElement>(null)
+  useInViewAutoplay(videoRef, Boolean(video))
   const rx = useSpring(useMotionValue(0), { stiffness: 260, damping: 22 })
   const ry = useSpring(useMotionValue(0), { stiffness: 260, damping: 22 })
   const shine = useMotionValue(50)
@@ -64,6 +70,19 @@ export function PosterCard({
           decoding="async"
           className="absolute inset-0 size-full object-cover transition-transform duration-[360ms] ease-out group-hover:scale-105"
         />
+        {video ? (
+          <video
+            ref={videoRef}
+            src={video}
+            poster={src}
+            muted
+            loop
+            playsInline
+            preload="none"
+            aria-hidden="true"
+            className="absolute inset-0 size-full object-cover"
+          />
+        ) : null}
         <motion.span
           className="absolute inset-0 mix-blend-soft-light"
           style={{ background: glare }}

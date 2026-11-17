@@ -3,7 +3,15 @@
  * очереди ComfyUI, поэтому фабрика образцов их не задерживает.
  */
 import { execFile } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import {
@@ -13,6 +21,8 @@ import {
   uploadImage,
   wanVideoWorkflow,
 } from '../factory/comfy.mjs'
+import { assembleShots, encode } from '../factory/assemble.mjs'
+import { imageHasFace, MIN_FACE_RATIO, videoFaceRatio } from '../factory/faces.mjs'
 import { toJpeg, toWebp } from './images.mjs'
 import { negative, planFor } from './presets.mjs'
 
@@ -87,13 +97,81 @@ export function startWorker({ q, config, log }) {
     return download(files[0])
   }
 
+  /** Проверка качества не должна ронять задачу: если детектор недоступен, кадр принимается. */
+  async function faceOk(buffer) {
+    try {
+      return (await imageHasFace(buffer)).ok
+    } catch (error) {
+      log(`проверка лица недоступна: ${error.message}`)
+      return true
+    }
+  }
+
+  async function faceRatio(file) {
+    try {
+      return (await videoFaceRatio(file)).ratio
+    } catch (error) {
+      log(`проверка лица недоступна: ${error.message}`)
+      return 1
+    }
+  }
+
+  /** Кадр, где лицо видно целиком: до трёх попыток с разными сидами. */
+  async function editWithFace(job, images, shot, index, upscale) {
+    let first
+    for (let attempt = 0; attempt < 3; attempt++) {
+      checkCancel(job.id)
+      const buf = await edit(
+        job,
+        images,
+        { ...shot, seed: shot.seed + attempt * 1009 },
+        index,
+        upscale,
+      )
+      first ??= buf
+      if (await faceOk(buf)) return buf
+      log(`задача ${job.id.slice(0, 8)}: кадр ${index + 1} без лица, попытка ${attempt + 2}`)
+    }
+    return first
+  }
+
+  /** Клип, где лицо видно хотя бы в 80% кадров: до трёх попыток, иначе лучший. */
+  async function clipWithFace(job, imageBuf, tag, clip, width, height, file) {
+    let best = { ratio: -1, path: '' }
+    for (let attempt = 0; attempt < 3; attempt++) {
+      checkCancel(job.id)
+      const path = `${file}.try${attempt}.mp4`
+      await wanClip(
+        job,
+        imageBuf,
+        `${tag}t${attempt}`,
+        { ...clip, seed: clip.seed + attempt * 7919 },
+        width,
+        height,
+        path,
+      )
+      const ratio = await faceRatio(path)
+      if (ratio > best.ratio) {
+        if (best.path) rmSync(best.path, { force: true })
+        best = { ratio, path }
+      } else {
+        rmSync(path, { force: true })
+      }
+      if (ratio >= MIN_FACE_RATIO) break
+      log(
+        `задача ${job.id.slice(0, 8)}: клип ${tag} лицо в ${Math.round(ratio * 100)}% кадров, пересъёмка`,
+      )
+    }
+    renameSync(best.path, file)
+  }
+
   async function photoJob(job, plan, out) {
     const images = await uploadPhotos(job)
     const results = []
     for (const [i, shot] of plan.entries()) {
       checkCancel(job.id)
       const png = join(out, `${i + 1}.png`)
-      writeFileSync(png, await edit(job, images, shot, i, 'RealESRGAN_x2plus.pth'))
+      writeFileSync(png, await editWithFace(job, images, shot, i, 'RealESRGAN_x2plus.pth'))
       await toJpeg(png, join(out, `${i + 1}.jpg`))
       await toWebp(png, join(out, `${i + 1}.webp`), 720)
       rmSync(png)
@@ -113,34 +191,8 @@ export function startWorker({ q, config, log }) {
 
   const videoNegative =
     'blurry, distorted face, changing face, hands covering the face, extra limbs, extra fingers, static, jitter, flicker, watermark, text, morphing'
-  const encode = [
-    '-c:v',
-    'libx264',
-    '-preset',
-    'medium',
-    '-crf',
-    '19',
-    '-pix_fmt',
-    'yuv420p',
-    '-movflags',
-    '+faststart',
-  ]
-
   async function ffmpeg(args) {
     await run('ffmpeg', ['-y', '-loglevel', 'error', ...args], { timeout: 300_000 })
-  }
-
-  async function seconds(file) {
-    const { stdout } = await run('ffprobe', [
-      '-v',
-      'error',
-      '-show_entries',
-      'format=duration',
-      '-of',
-      'csv=p=0',
-      file,
-    ])
-    return Number(stdout.trim())
   }
 
   /** Клип Wan 2.2 из картинки, 81 кадр ≈ 5 с. */
@@ -179,7 +231,7 @@ export function startWorker({ q, config, log }) {
     ]
   }
 
-  /** Видеошаблон: три плана (кадр → клип), склейка с переходами и музыкой ≈ 14 с. */
+  /** Видеошаблон: четыре плана (кадр → клип), склейка с переходами и музыкой ≈ 19 с. */
   async function videoJob(job, plan, out) {
     const images = await uploadPhotos(job)
     const clips = []
@@ -187,12 +239,12 @@ export function startWorker({ q, config, log }) {
     for (const [i, shot] of plan.shots.entries()) {
       checkCancel(job.id)
       const still = join(out, `still-${i}.png`)
-      writeFileSync(still, await edit(job, images, shot.still, i))
+      writeFileSync(still, await editWithFace(job, images, shot.still, i))
       if (i === 0) await toWebp(still, join(out, 'poster.webp'), 720)
       q.progress.run(++step, '[]', job.id)
       checkCancel(job.id)
       const clip = join(out, `clip-${i}.mp4`)
-      await wanClip(
+      await clipWithFace(
         job,
         readFileSync(still),
         `s${i}`,
@@ -207,59 +259,8 @@ export function startWorker({ q, config, log }) {
     }
     checkCancel(job.id)
 
-    const lengths = await Promise.all(clips.map(seconds))
-    const fade = 0.5
-    const total = lengths.reduce((a, b) => a + b, 0) - fade * (clips.length - 1)
-    let chain = '[0:v]'
-    let offset = 0
-    const parts = []
-    for (let i = 1; i < clips.length; i++) {
-      offset += lengths[i - 1] - fade
-      const outLabel = i === clips.length - 1 ? '[vx]' : `[v${i}]`
-      parts.push(
-        `${chain}[${i}:v]xfade=transition=fade:duration=${fade}:offset=${offset.toFixed(3)}${outLabel}`,
-      )
-      chain = outLabel
-    }
-    parts.push('[vx]format=yuv420p[v]')
     const music = join(config.mediaDir, 'music', `${job.target}.mp3`)
-    const inputs = clips.flatMap((c) => ['-i', c])
-    const final = join(out, 'video.mp4')
-    if (existsSync(music)) {
-      parts.push(
-        `[${clips.length}:a]apad,atrim=0:${total.toFixed(3)},afade=t=out:st=${(total - 1.5).toFixed(3)}:d=1.5[a]`,
-      )
-      await ffmpeg([
-        ...inputs,
-        '-i',
-        music,
-        '-filter_complex',
-        parts.join(';'),
-        '-map',
-        '[v]',
-        '-map',
-        '[a]',
-        ...encode,
-        '-c:a',
-        'aac',
-        '-b:a',
-        '160k',
-        '-t',
-        total.toFixed(3),
-        final,
-      ])
-    } else {
-      await ffmpeg([
-        ...inputs,
-        '-filter_complex',
-        parts.join(';'),
-        '-map',
-        '[v]',
-        ...encode,
-        '-an',
-        final,
-      ])
-    }
+    const { total } = await assembleShots(clips, music, join(out, 'video.mp4'))
     for (const c of clips) rmSync(c)
     const first = plan.shots[0].video
     const results = videoResult(job, first.width, first.height, `${Math.round(total)} с`)
@@ -273,10 +274,13 @@ export function startWorker({ q, config, log }) {
     await toWebp(source, join(out, 'poster.webp'), 720)
     const parts = []
     let image = readFileSync(source)
+    // Если на исходном фото есть лицо, оно должно остаться в кадре и в ролике.
+    const withFace = await faceOk(image)
     for (const [i, clip] of plan.clips.entries()) {
       checkCancel(job.id)
       const file = join(out, `part-${i}.mp4`)
-      await wanClip(job, image, `a${i}`, clip, plan.width, plan.height, file)
+      if (withFace) await clipWithFace(job, image, `a${i}`, clip, plan.width, plan.height, file)
+      else await wanClip(job, image, `a${i}`, clip, plan.width, plan.height, file)
       parts.push(file)
       if (i < plan.clips.length - 1) {
         const frame = join(out, `last-${i}.png`)

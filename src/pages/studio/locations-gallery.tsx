@@ -1,12 +1,15 @@
 import { useState } from 'react'
 import { PosterCard } from '@/components/studio/poster-card.tsx'
 import { Modal } from '@/components/ui/modal.tsx'
+import { MoreButton } from '@/components/studio/more-button.tsx'
 import { useMedia, type PhotoLocation } from '@/features/media/use-media.ts'
+import { usePaged } from '@/hooks/use-paged.ts'
 
 /** Образцы локаций: 30 мест по 5 кадров. Все изображения созданы ИИ. */
 export function LocationsGallery() {
   const { photos } = useMedia()
   const [open, setOpen] = useState<PhotoLocation | undefined>()
+  const page = usePaged(photos, 10)
   if (photos.length === 0) return null
 
   return (
@@ -25,7 +28,7 @@ export function LocationsGallery() {
         </p>
       </div>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-5 lg:grid-cols-5">
-        {photos.map((loc, i) => (
+        {page.visible.map((loc, i) => (
           <PosterCard
             key={loc.id}
             index={i}
@@ -37,6 +40,13 @@ export function LocationsGallery() {
           />
         ))}
       </div>
+      <MoreButton
+        shown={page.visible.length}
+        total={page.total}
+        left={page.left}
+        step={10}
+        onMore={page.more}
+      />
       <Modal open={Boolean(open)} title={open?.title ?? ''} onClose={() => setOpen(undefined)}>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {open?.shots.map((shot) => (

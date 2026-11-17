@@ -110,8 +110,8 @@ export function VideoCreatePage() {
     id: template.id,
     title: template.title,
     cover: media.videos[template.id]?.poster ?? template.cover,
-    output: 'ролик ≈14 секунд: три плана и музыка',
-    eta: 'около 7 минут',
+    output: 'ролик ≈19 секунд: четыре плана и музыка',
+    eta: 'около 10 минут',
   }
   return (
     <WizardScreen

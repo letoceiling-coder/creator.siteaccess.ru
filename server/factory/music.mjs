@@ -3,7 +3,7 @@
  * Музыка для 30 видеошаблонов: ACE-Step через ComfyUI. Описание берётся из каталога шаблонов.
  *   node music.mjs run [--limit N] [--redo-short] | status
  *
- * Трек не короче MIN_SECONDS (17 с): видеошаблон из трёх планов длится около 14 с.
+ * Трек не короче MIN_SECONDS (22 с): видеошаблон из четырёх планов длится около 19 с.
  * --redo-short пересоздаёт треки, сделанные короче.
  */
 import { execFileSync } from 'node:child_process'
@@ -19,7 +19,7 @@ const statePath = `${dir}/state.json`
 mkdirSync(dir, { recursive: true })
 const state = existsSync(statePath) ? JSON.parse(readFileSync(statePath, 'utf8')) : { done: {} }
 
-const MIN_SECONDS = 17
+const MIN_SECONDS = 22
 
 const bright = new Set(['party', 'style', 'brand'])
 const keys = {

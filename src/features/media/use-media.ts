@@ -18,6 +18,8 @@ export interface PhotoLocation {
 export interface VideoClip {
   src: string
   poster: string
+  /** Превью 6 с без звука для карточки. */
+  preview?: string
   ratio: '9:16' | '16:9' | '1:1'
   seconds: number
   withMusic: boolean

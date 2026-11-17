@@ -3,18 +3,13 @@ import { useReducedMotion } from 'motion/react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createSoundtrack } from '@/features/audio/soundtrack.ts'
 import type { VideoTemplate } from '@/features/catalog/video-data.ts'
+import { frameStyle as ratioFrame } from './frame-style.ts'
 
 const moves = [
   { x: -3, y: 0 },
   { x: 3, y: -2 },
   { x: 0, y: 3 },
 ] as const
-
-const ratioStyle: Record<VideoTemplate['ratio'], string> = {
-  '9:16': '9 / 16',
-  '16:9': '16 / 9',
-  '1:1': '1 / 1',
-}
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 const fmt = (s: number) => `0:${String(Math.floor(s)).padStart(2, '0')}`
@@ -95,7 +90,7 @@ export function VideoPlayer({ template }: { template: VideoTemplate }) {
     <div className="grid gap-3">
       <div
         className="chamfer grain bg-canvas-sunken relative mx-auto w-full overflow-hidden"
-        style={{ aspectRatio: ratioStyle[template.ratio], maxHeight: '68dvh' }}
+        style={ratioFrame(template.ratio)}
       >
         {shot > 0 ? (
           <img

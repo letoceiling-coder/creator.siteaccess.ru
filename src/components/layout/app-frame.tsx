@@ -71,7 +71,7 @@ export function AppFrame() {
       className={cn(
         'bg-canvas text-ink min-h-dvh',
         showDock && 'pb-28',
-        showDock && !miniapp && 'md:pb-0',
+        showDock && !miniapp && 'md:pb-16',
       )}
     >
       <a

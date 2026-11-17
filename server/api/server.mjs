@@ -14,6 +14,7 @@ import { createServer } from 'node:http'
 import { join } from 'node:path'
 import { Readable, Transform } from 'node:stream'
 import { openDb } from './db.mjs'
+import { imageHasFace } from '../factory/faces.mjs'
 import { MAX_PHOTO_BYTES, normalize, sniff } from './images.mjs'
 import { planFor, stepsFor, times } from './presets.mjs'
 import { startWorker } from './worker.mjs'
@@ -194,6 +195,20 @@ async function createJob(req, res) {
         rmSync(raw, { force: true })
       }
       if (i === 0) Object.assign(options, { w: size.width, h: size.height })
+      // Для фотосессии и видео нужно различимое лицо на каждом снимке.
+      if (kind !== 'animate' && env.FACE_CHECK !== 'off') {
+        let face = { ok: true }
+        try {
+          face = await imageHasFace(readFileSync(join(dir, `${i}.png`)))
+        } catch (error) {
+          log(`проверка лица недоступна: ${error.message}`)
+        }
+        if (!face.ok)
+          throw new HttpError(
+            422,
+            `На фото ${i + 1} не видно лица целиком. Выберите снимок, где лицо хорошо видно и не закрыто.`,
+          )
+      }
       if (Math.min(size.width, size.height) < 256)
         throw new HttpError(
           422,
