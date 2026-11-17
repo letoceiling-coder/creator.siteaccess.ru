@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 /**
  * Музыка для 30 видеошаблонов: ACE-Step через ComfyUI. Описание берётся из каталога шаблонов.
- *   node music.mjs run [--limit N] | status
+ *   node music.mjs run [--limit N] [--redo-short] | status
+ *
+ * Трек не короче MIN_SECONDS (17 с): видеошаблон из трёх планов длится около 14 с.
+ * --redo-short пересоздаёт треки, сделанные короче.
  */
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
@@ -15,6 +18,8 @@ const dir = `${root}/music`
 const statePath = `${dir}/state.json`
 mkdirSync(dir, { recursive: true })
 const state = existsSync(statePath) ? JSON.parse(readFileSync(statePath, 'utf8')) : { done: {} }
+
+const MIN_SECONDS = 17
 
 const bright = new Set(['party', 'style', 'brand'])
 const keys = {
@@ -35,7 +40,7 @@ function save() {
 
 async function make(t, index) {
   const pool = bright.has(t.category) ? keys.bright : keys.dark
-  const seconds = t.seconds + 3 // запас под окончание
+  const seconds = Math.max(t.seconds + 3, MIN_SECONDS) // запас под окончание
   const files = await runWorkflow(
     aceMusicWorkflow({
       tags: describe(t),
@@ -62,21 +67,24 @@ async function make(t, index) {
     `loudnorm=I=-14:TP=-1.5:LRA=11,afade=t=out:st=${seconds - 1.5}:d=1.5`,
     '-b:a',
     '160k',
-    `${dir}/${t.id}.mp3`,
+    `${dir}/${t.id}.next.mp3`,
   ])
   rmSync(tmp)
+  // Замена файла атомарно: задачи, которые сейчас читают трек, не получат половину файла.
+  renameSync(`${dir}/${t.id}.next.mp3`, `${dir}/${t.id}.mp3`)
   state.done[t.id] = { src: `/media/music/${t.id}.mp3`, bpm: t.bpm, seconds }
   save()
 }
 
 const [cmd = 'status', ...rest] = process.argv.slice(2)
 const limit = rest.includes('--limit') ? Number(rest[rest.indexOf('--limit') + 1]) : Infinity
+const redoShort = rest.includes('--redo-short')
 if (cmd === 'status') {
   console.log(`${Object.keys(state.done).length} из ${templates.length} треков готово`)
 } else if (cmd === 'run') {
   const todo = templates
     .map((t, i) => [t, i])
-    .filter(([t]) => !state.done[t.id])
+    .filter(([t]) => !state.done[t.id] || (redoShort && state.done[t.id].seconds < MIN_SECONDS))
     .slice(0, limit)
   console.log(`К работе: ${todo.length} треков`)
   let failed = 0
@@ -100,6 +108,6 @@ if (cmd === 'status') {
     `Готово. Не удалось: ${failed}. Всего ${Object.keys(state.done).length}/${templates.length}`,
   )
 } else {
-  console.error('Команды: run [--limit N], status')
+  console.error('Команды: run [--limit N] [--redo-short], status')
   process.exit(1)
 }

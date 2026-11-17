@@ -3,6 +3,7 @@ import { Alert } from '@/components/ui/alert.tsx'
 import { scenarios } from '@/features/catalog/data.ts'
 import { videoTemplates } from '@/features/catalog/video-data.ts'
 import type { JobKind } from '@/features/jobs/api.ts'
+import { motions } from '@/features/jobs/motions.ts'
 import { useMedia } from '@/features/media/use-media.ts'
 import { usePaths } from '@/features/platform/use-paths.ts'
 import { CabinetScreen, JobScreen, WizardScreen, type CreateTarget } from './job-screens.tsx'
@@ -33,6 +34,13 @@ function Missing() {
 function useDescribe() {
   const media = useMedia()
   return (kind: JobKind, target: string) => {
+    if (kind === 'animate') {
+      const m = motions.find((x) => x.id === target)
+      return {
+        title: `Оживление: ${m?.label.toLowerCase() ?? 'фото'}`,
+        cover: scenarios[0]?.cover ?? '',
+      }
+    }
     if (kind === 'video') {
       const v = videoTemplates.find((t) => t.id === target)
       return v ? { title: v.title, cover: media.videos[v.id]?.poster ?? v.cover } : undefined
@@ -102,13 +110,33 @@ export function VideoCreatePage() {
     id: template.id,
     title: template.title,
     cover: media.videos[template.id]?.poster ?? template.cover,
-    output: 'ролик 5 секунд с музыкой',
-    eta: 'около 5 минут',
+    output: 'ролик ≈14 секунд: три плана и музыка',
+    eta: 'около 7 минут',
   }
   return (
     <WizardScreen
       target={target}
       onBack={() => void navigate(paths.videoItem(template.id))}
+      onDone={(jobId) => void navigate(paths.job(jobId))}
+    />
+  )
+}
+
+export function AnimatePage() {
+  const navigate = useNavigate()
+  const paths = usePaths()
+  const target: CreateTarget = {
+    kind: 'animate',
+    id: 'animate',
+    title: 'Оживить фото',
+    cover: scenarios[0]?.cover ?? '',
+    output: 'ролик 5 или 10 секунд',
+    eta: 'около 2–4 минут',
+  }
+  return (
+    <WizardScreen
+      target={target}
+      onBack={() => void navigate(paths.video)}
       onDone={(jobId) => void navigate(paths.job(jobId))}
     />
   )
@@ -126,7 +154,13 @@ export function JobPage() {
       describe={describe}
       onCabinet={() => void navigate(paths.cabinet)}
       onRetry={(kind, target) =>
-        void navigate(kind === 'video' ? paths.videoCreate(target) : paths.create(target))
+        void navigate(
+          kind === 'animate'
+            ? paths.animate
+            : kind === 'video'
+              ? paths.videoCreate(target)
+              : paths.create(target),
+        )
       }
     />
   )
@@ -135,7 +169,12 @@ export function JobPage() {
 export function VideoPage() {
   const navigate = useNavigate()
   const paths = usePaths()
-  return <VideoCatalogScreen onOpen={(id) => void navigate(paths.videoItem(id))} />
+  return (
+    <VideoCatalogScreen
+      onOpen={(id) => void navigate(paths.videoItem(id))}
+      onAnimate={() => void navigate(paths.animate)}
+    />
+  )
 }
 
 export function VideoItemPage() {

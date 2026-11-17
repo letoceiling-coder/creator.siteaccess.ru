@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-export type JobKind = 'photo' | 'video'
+export type JobKind = 'photo' | 'video' | 'animate'
 export type TimeOfDay = 'day' | 'dusk' | 'night'
 
 const resultSchema = z.object({
@@ -15,7 +15,7 @@ const resultSchema = z.object({
 
 const jobSchema = z.object({
   id: z.string(),
-  kind: z.enum(['photo', 'video']),
+  kind: z.enum(['photo', 'video', 'animate']),
   target: z.string(),
   status: z.enum(['queued', 'running', 'done', 'failed', 'cancelled', 'expired']),
   done: z.number(),
@@ -100,6 +100,8 @@ export interface CreateJobInput {
   target: string
   outfit: number
   time: TimeOfDay
+  /** Только для «оживления»: 5 или 10 секунд. */
+  duration?: 5 | 10
   photos: File[]
 }
 
@@ -109,6 +111,7 @@ export async function createJob(input: CreateJobInput): Promise<LocalJob & { pos
   form.append('target', input.target)
   form.append('outfit', String(input.outfit))
   form.append('time', input.time)
+  if (input.duration) form.append('duration', String(input.duration))
   form.append('consent', 'yes')
   for (const photo of input.photos) form.append('photos', photo, photo.name)
   let res: Response

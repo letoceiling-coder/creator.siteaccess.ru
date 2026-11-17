@@ -22,7 +22,7 @@ before(async () => {
       DATA_DIR: dir,
       MEDIA_DIR: dir,
       WORKER: 'off',
-      MAX_DAILY: '3',
+      MAX_DAILY: '4',
     },
     stdio: 'ignore',
   })
@@ -83,18 +83,35 @@ test('принимает задачу и отдаёт её по токену', a
   assert.equal(cancelled.status, 'cancelled')
 })
 
-test('видеошаблон: три шага', async () => {
+test('видеошаблон: три плана и склейка — семь шагов', async () => {
   const res = await post(form({ kind: 'video', target: 'coast-run' }))
   assert.equal(res.status, 201)
   const { id, token } = await res.json()
   const job = await (
     await fetch(`${base}/api/jobs/${id}`, { headers: { authorization: `Bearer ${token}` } })
   ).json()
-  assert.equal(job.total, 3)
+  assert.equal(job.total, 7)
   await fetch(`${base}/api/jobs/${id}/cancel`, {
     method: 'POST',
     headers: { authorization: `Bearer ${token}` },
   })
+})
+
+test('оживление: одно фото, 5 или 10 секунд', async () => {
+  const ok = await post(form({ kind: 'animate', target: 'wind', duration: '10' }))
+  assert.equal(ok.status, 201)
+  const { id, token } = await ok.json()
+  const job = await (
+    await fetch(`${base}/api/jobs/${id}`, { headers: { authorization: `Bearer ${token}` } })
+  ).json()
+  assert.equal(job.total, 2)
+  await fetch(`${base}/api/jobs/${id}/cancel`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}` },
+  })
+  assert.equal((await post(form({ kind: 'animate', target: 'wind', duration: '7' }))).status, 400)
+  assert.equal((await post(form({ kind: 'animate', target: 'constructor' }))).status, 404)
+  assert.equal((await post(form({ kind: 'animate', target: 'smile' }, [photo, photo]))).status, 400)
 })
 
 test('отклоняет неверные запросы', async () => {
@@ -111,7 +128,7 @@ test('отклоняет неверные запросы', async () => {
 })
 
 test('дневной лимит на клиента', async () => {
-  // MAX_DAILY=3: две задачи уже созданы выше
+  // MAX_DAILY=4: три задачи уже созданы выше
   const a = await post(form({}))
   const tokenA = await a.json()
   const b = await post(form({}))

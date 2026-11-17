@@ -24,6 +24,7 @@ import {
   type LocalJob,
   type TimeOfDay,
 } from '@/features/jobs/api.ts'
+import { motions } from '@/features/jobs/motions.ts'
 import { cn } from '@/shared/cn.ts'
 
 /** Что создаём: фотосессию по сценарию или ролик по шаблону. */
@@ -48,7 +49,6 @@ function Label({ children }: { children: string }) {
 
 /* ───────────── Мастер ───────────── */
 
-const wizardSteps = ['Фото', 'Образ', 'Проверка']
 const outfits = ['Как в сценарии', 'Светлый костюм', 'Тёмное пальто']
 const times: { id: TimeOfDay; label: string }[] = [
   { id: 'day', label: 'День' },
@@ -56,10 +56,66 @@ const times: { id: TimeOfDay; label: string }[] = [
   { id: 'night', label: 'Ночь' },
 ]
 
-function StepRail({ step }: { step: number }) {
+const durations = [
+  { id: '5', label: '5 секунд' },
+  { id: '10', label: '10 секунд' },
+]
+
+function ChoiceList({
+  label,
+  items,
+  value,
+  onChange,
+}: {
+  label: string
+  items: { id: string; label: string; hint?: string }[]
+  value: string
+  onChange: (id: string) => void
+}) {
+  return (
+    <div className="grid gap-2" role="radiogroup" aria-label={label}>
+      {items.map((item) => {
+        const active = item.id === value
+        return (
+          <button
+            key={item.id}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            onClick={() => onChange(item.id)}
+            className={cn(
+              'chamfer-sm relative flex min-h-14 items-center justify-between gap-3 px-4 py-2 text-left transition-colors duration-[140ms]',
+              active ? 'bg-canvas-overlay text-ink' : 'bg-canvas-raised text-ink-muted',
+            )}
+          >
+            {active ? (
+              <motion.span
+                layoutId={`${label}-bar`}
+                className="bg-accent-fill absolute inset-y-0 left-0 w-1"
+              />
+            ) : null}
+            <span className="grid">
+              <span>{item.label}</span>
+              {item.hint ? <span className="text-caption text-ink-muted">{item.hint}</span> : null}
+            </span>
+            <motion.span
+              initial={false}
+              animate={{ scale: active ? 1 : 0, opacity: active ? 1 : 0 }}
+              className="bg-accent-fill text-accent-ink grid size-6 shrink-0 place-items-center"
+            >
+              <Check size={14} aria-hidden="true" />
+            </motion.span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function StepRail({ step, names }: { step: number; names: string[] }) {
   return (
     <ol className="grid grid-cols-3 gap-1" aria-label="Шаги">
-      {wizardSteps.map((name, i) => (
+      {names.map((name, i) => (
         <li key={name} aria-current={i === step ? 'step' : undefined} className="grid gap-2">
           <span className="bg-canvas-sunken relative block h-1 overflow-hidden">
             <motion.span
@@ -97,8 +153,14 @@ export function WizardScreen({
   onDone: (jobId: string) => void
   onBack: () => void
 }) {
+  const animate = target.kind === 'animate'
+  const slots = animate ? 1 : 3
   const [step, setStep] = useState(0)
-  const [photos, setPhotos] = useState<(Picked | undefined)[]>([undefined, undefined, undefined])
+  const [photos, setPhotos] = useState<(Picked | undefined)[]>(() =>
+    Array.from({ length: slots }, () => undefined),
+  )
+  const [motionId, setMotionId] = useState('smile')
+  const [duration, setDuration] = useState<5 | 10>(5)
   const [outfit, setOutfit] = useState(0)
   const [time, setTime] = useState<TimeOfDay>('day')
   const [consent, setConsent] = useState(false)
@@ -128,7 +190,7 @@ export function WizardScreen({
         }
         const free = next.findIndex((p) => !p)
         if (free < 0) {
-          problems.push('Можно не больше трёх фото')
+          problems.push(slots === 1 ? 'Нужно одно фото' : 'Можно не больше трёх фото')
           break
         }
         const url = URL.createObjectURL(file)
@@ -159,9 +221,10 @@ export function WizardScreen({
     try {
       const job = await createJob({
         kind: target.kind,
-        target: target.id,
+        target: animate ? motionId : target.id,
         outfit,
         time,
+        duration: animate ? duration : undefined,
         photos: photos.filter((p): p is Picked => Boolean(p)).map((p) => p.file),
       })
       onDone(job.id)
@@ -177,12 +240,12 @@ export function WizardScreen({
 
   return (
     <div className="mx-auto grid max-w-xl gap-6 px-4 pt-4 md:px-6">
-      <StepRail step={step} />
+      <StepRail step={step} names={['Фото', animate ? 'Движение' : 'Образ', 'Проверка']} />
       <input
         ref={input}
         type="file"
         accept={PHOTO_TYPES.join(',')}
-        multiple
+        multiple={!animate}
         hidden
         onChange={pick}
         data-testid="photo-input"
@@ -201,8 +264,9 @@ export function WizardScreen({
               <div className="grid gap-2">
                 <h1 className="font-display text-title text-ink text-[1.75rem]">Ваши фото</h1>
                 <p className="text-body text-ink-muted">
-                  От одного до трёх снимков. Лицо хорошо видно, без сильных фильтров, очков и
-                  перекрытий. Лучше разные ракурсы.
+                  {animate
+                    ? 'Один снимок, который нужно оживить. Подойдут и старые фото, переснятые на телефон. Лицо должно быть различимо.'
+                    : 'От одного до трёх снимков. Лицо хорошо видно, без сильных фильтров, очков и перекрытий. Лучше разные ракурсы.'}
                 </p>
               </div>
               <div className="grid grid-cols-3 gap-2">
@@ -219,7 +283,7 @@ export function WizardScreen({
               <StudioButton
                 variant="outline"
                 onClick={() => input.current?.click()}
-                disabled={count === 3}
+                disabled={count === slots}
               >
                 <span className="inline-flex items-center gap-2">
                   <ImagePlus size={18} aria-hidden="true" /> Выбрать фото
@@ -229,43 +293,38 @@ export function WizardScreen({
             </>
           ) : null}
 
-          {step === 1 ? (
+          {step === 1 && animate ? (
+            <>
+              <h1 className="font-display text-title text-ink text-[1.75rem]">Движение</h1>
+              <ChoiceList
+                label="Движение"
+                items={motions}
+                value={motionId}
+                onChange={setMotionId}
+              />
+              <div className="grid gap-2">
+                <Label>Длительность</Label>
+                <ApertureTabs
+                  label="Длительность"
+                  items={durations}
+                  value={String(duration)}
+                  onChange={(id) => setDuration(id === '10' ? 10 : 5)}
+                />
+              </div>
+            </>
+          ) : null}
+
+          {step === 1 && !animate ? (
             <>
               <h1 className="font-display text-title text-ink text-[1.75rem]">Образ</h1>
               <div className="grid gap-2">
                 <Label>Одежда</Label>
-                <div className="grid gap-2" role="radiogroup" aria-label="Одежда">
-                  {outfits.map((name, i) => (
-                    <button
-                      key={name}
-                      type="button"
-                      role="radio"
-                      aria-checked={outfit === i}
-                      onClick={() => setOutfit(i)}
-                      className={cn(
-                        'chamfer-sm relative flex min-h-14 items-center justify-between px-4 text-left transition-colors duration-[140ms]',
-                        outfit === i
-                          ? 'bg-canvas-overlay text-ink'
-                          : 'bg-canvas-raised text-ink-muted',
-                      )}
-                    >
-                      {outfit === i ? (
-                        <motion.span
-                          layoutId="outfit-bar"
-                          className="bg-accent-fill absolute inset-y-0 left-0 w-1"
-                        />
-                      ) : null}
-                      <span>{name}</span>
-                      <motion.span
-                        initial={false}
-                        animate={{ scale: outfit === i ? 1 : 0, opacity: outfit === i ? 1 : 0 }}
-                        className="bg-accent-fill text-accent-ink grid size-6 place-items-center"
-                      >
-                        <Check size={14} aria-hidden="true" />
-                      </motion.span>
-                    </button>
-                  ))}
-                </div>
+                <ChoiceList
+                  label="Одежда"
+                  items={outfits.map((name, i) => ({ id: String(i), label: name }))}
+                  value={String(outfit)}
+                  onChange={(id) => setOutfit(Number(id))}
+                />
               </div>
               {target.kind === 'photo' ? (
                 <div className="grid gap-2">
@@ -288,10 +347,12 @@ export function WizardScreen({
                   />
                   <div className="grid content-center gap-1">
                     <span className="text-caption tracking-label text-accent uppercase">
-                      {target.kind === 'video' ? 'Видеошаблон' : 'Сценарий'}
+                      {animate ? 'Оживление' : target.kind === 'video' ? 'Видеошаблон' : 'Сценарий'}
                     </span>
                     <span className="font-display text-ink text-xl">{target.title}</span>
-                    <span className="text-caption text-ink-muted">{target.output}</span>
+                    <span className="text-caption text-ink-muted">
+                      {animate ? `ролик ${duration} секунд` : target.output}
+                    </span>
                   </div>
                 </div>
                 <div className="flex gap-2">
@@ -307,13 +368,20 @@ export function WizardScreen({
                   )}
                 </div>
                 <dl className="divide-line border-line text-body grid divide-y border-y">
-                  {[
-                    ['Одежда', outfits[outfit] ?? ''],
-                    ...(target.kind === 'photo'
-                      ? [['Время', times.find((t) => t.id === time)?.label ?? '']]
-                      : []),
-                    ['Ожидание', target.eta],
-                  ].map(([k, v]) => (
+                  {(animate
+                    ? [
+                        ['Движение', motions.find((m) => m.id === motionId)?.label ?? ''],
+                        ['Длительность', `${duration} с`],
+                        ['Ожидание', duration === 10 ? 'около 4 минут' : 'около 2 минут'],
+                      ]
+                    : [
+                        ['Одежда', outfits[outfit] ?? ''],
+                        ...(target.kind === 'photo'
+                          ? [['Время', times.find((t) => t.id === time)?.label ?? '']]
+                          : []),
+                        ['Ожидание', target.eta],
+                      ]
+                  ).map(([k, v]) => (
                     <div key={k} className="flex justify-between py-3">
                       <dt className="text-ink-muted">{k}</dt>
                       <dd className="text-ink">{v}</dd>

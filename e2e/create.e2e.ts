@@ -93,6 +93,31 @@ test.describe('create a photo session', () => {
     await expect(page.getByRole('button', { name: /Северный берег/ })).toBeVisible()
   })
 
+  test('animates an own photo: one photo, motion and duration', async ({ page }) => {
+    const uploads = await mockApi(page)
+    await page.goto('/video', { waitUntil: 'domcontentloaded' })
+    await page.getByRole('button', { name: /Оживить своё фото/ }).click()
+    await expect(page).toHaveURL(/\/video\/animate$/)
+    await page.getByTestId('photo-input').setInputFiles({
+      name: 'old.jpg',
+      mimeType: 'image/jpeg',
+      buffer: photo,
+    })
+    await expect(page.getByRole('button', { name: 'Выбрать фото' })).toBeDisabled()
+    await page.getByRole('button', { name: 'Дальше' }).click()
+    await expect(page.getByRole('heading', { name: 'Движение' })).toBeVisible()
+    await page.getByRole('radio', { name: /Ветер/ }).click()
+    await page.getByRole('tab', { name: '10 секунд' }).click()
+    await page.getByRole('button', { name: 'Дальше' }).click()
+    await expect(page.getByText('10 с', { exact: true })).toBeVisible()
+    await page.getByText('Это мои фото').click()
+    await page.getByRole('button', { name: 'Создать' }).click()
+    await expect(page).toHaveURL(new RegExp(`/jobs/${jobId}$`))
+    expect(uploads[0]).toContain('name="kind"\r\n\r\nanimate')
+    expect(uploads[0]).toContain('name="target"\r\n\r\nwind')
+    expect(uploads[0]).toContain('name="duration"\r\n\r\n10')
+  })
+
   test('opens the video wizard from a template', async ({ page }) => {
     await mockApi(page)
     await page.goto('/video/coast-run', { waitUntil: 'domcontentloaded' })

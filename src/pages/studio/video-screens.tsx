@@ -1,4 +1,4 @@
-import { Music2 } from 'lucide-react'
+import { Music2, Sparkles } from 'lucide-react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useMemo, useState } from 'react'
 import { ActionBar } from '@/components/studio/action-bar.tsx'
@@ -27,7 +27,13 @@ function Label({ children }: { children: string }) {
 
 /* ───────────── Каталог шаблонов ───────────── */
 
-export function VideoCatalogScreen({ onOpen }: { onOpen: (id: string) => void }) {
+export function VideoCatalogScreen({
+  onOpen,
+  onAnimate,
+}: {
+  onOpen: (id: string) => void
+  onAnimate: () => void
+}) {
   const media = useMedia()
   const [category, setCategory] = useState<VideoCategoryId>('all')
   const list = useMemo(
@@ -40,10 +46,26 @@ export function VideoCatalogScreen({ onOpen }: { onOpen: (id: string) => void })
         <Label>Каталог</Label>
         <h1 className="font-display text-title text-ink text-[2rem]">Видеошаблоны</h1>
         <p className="text-body text-ink-muted max-w-xl">
-          {videoTemplates.length} шаблонов. Выберите ролик — внутри раскадровка и музыка. Запуск
-          создания откроется позже.
+          {videoTemplates.length} шаблонов. Ваш ролик снимается как у съёмочной группы: общий,
+          средний и крупный план с движением камеры, переходы и музыка — около 14 секунд.
         </p>
       </div>
+      <button
+        type="button"
+        onClick={onAnimate}
+        className="chamfer ticks grain bg-canvas-raised hover:bg-canvas-overlay group flex min-h-20 items-center justify-between gap-4 p-4 text-left transition-colors duration-[140ms]"
+      >
+        <span className="grid gap-1">
+          <span className="font-display text-ink text-xl">Оживить своё фото</span>
+          <span className="text-caption text-ink-muted">
+            Снимок приходит в движение: улыбка, ветер, поворот. 5 или 10 секунд. Подходит и для
+            старых семейных фото.
+          </span>
+        </span>
+        <span className="bg-accent-fill text-accent-ink chamfer-sm grid size-11 shrink-0 place-items-center transition-transform duration-[220ms] group-hover:translate-x-1">
+          <Sparkles size={18} aria-hidden="true" />
+        </span>
+      </button>
       <ApertureTabs
         label="Категории видео"
         items={videoCategories}
@@ -64,7 +86,7 @@ export function VideoCatalogScreen({ onOpen }: { onOpen: (id: string) => void })
               <PosterCard
                 index={i}
                 title={v.title}
-                tag={`${v.seconds} с · ${v.ratio}`}
+                tag={`≈14 с · ${v.ratio}`}
                 frames={v.shots.length}
                 unit="плана"
                 src={media.videos[v.id]?.poster ?? v.cover}
@@ -132,7 +154,7 @@ export function VideoDetailScreen({
 
         <dl className="border-line grid grid-cols-3 border-y py-4 text-center">
           {[
-            ['Ролик', '5 с'],
+            ['Ролик', '≈14 с'],
             ['Формат', template.ratio],
             ['Фото', '1–3'],
           ].map(([term, value]) => (

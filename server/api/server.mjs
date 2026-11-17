@@ -2,7 +2,8 @@
 /**
  * API задач AI Creative Studio. Без внешних зависимостей: node:http, node:sqlite, ffmpeg.
  *
- *   POST /api/jobs             multipart: kind, target, outfit, time, consent=yes, photos (1–3)
+ *   POST /api/jobs             multipart: kind (photo|video|animate), target, outfit, time,
+ *                              duration (animate: 5|10), consent=yes, photos (1–3, animate: 1)
  *   GET  /api/jobs/:id         Authorization: Bearer <token>
  *   POST /api/jobs/:id/cancel  Authorization: Bearer <token>
  *   GET  /api/health
@@ -153,16 +154,24 @@ async function createJob(req, res) {
   const outfit = Number(text('outfit', '0'))
   const time = text('time', 'day')
   if (text('consent', '') !== 'yes') throw new HttpError(400, 'Нужно согласие на обработку фото')
-  if (!['photo', 'video'].includes(kind) || !/^[a-z0-9-]{1,40}$/.test(target))
+  const duration = Number(text('duration', '5'))
+  if (!['photo', 'video', 'animate'].includes(kind) || !/^[a-z0-9-]{1,40}$/.test(target))
     throw new HttpError(400, 'Неверный сценарий')
   if (!Number.isInteger(outfit) || outfit < 0 || outfit > 2 || !Object.hasOwn(times, time))
     throw new HttpError(400, 'Неверные параметры образа')
-  const options = { outfit, time }
-  const plan = planFor(kind, target, options)
+  if (![5, 10].includes(duration)) throw new HttpError(400, 'Длительность: 5 или 10 секунд')
+  const options = kind === 'animate' ? { duration } : { outfit, time }
+  // Пропорции для «оживления» станут известны после проверки фото; для плана берём заглушку.
+  const plan = planFor(kind, target, { ...options, w: 3, h: 4 })
   if (!plan) throw new HttpError(404, 'Сценарий не найден')
 
   const files = form.getAll('photos').filter((f) => typeof f === 'object' && f !== null)
-  if (files.length < 1 || files.length > 3) throw new HttpError(400, 'Нужно от одного до трёх фото')
+  const maxFiles = kind === 'animate' ? 1 : 3
+  if (files.length < 1 || files.length > maxFiles)
+    throw new HttpError(
+      400,
+      kind === 'animate' ? 'Нужно одно фото' : 'Нужно от одного до трёх фото',
+    )
 
   const id = randomBytes(16).toString('hex')
   const token = randomBytes(24).toString('base64url')
@@ -184,6 +193,7 @@ async function createJob(req, res) {
       } finally {
         rmSync(raw, { force: true })
       }
+      if (i === 0) Object.assign(options, { w: size.width, h: size.height })
       if (Math.min(size.width, size.height) < 256)
         throw new HttpError(
           422,

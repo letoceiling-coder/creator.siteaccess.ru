@@ -179,6 +179,7 @@ export function wanVideoWorkflow({
   frames = 81,
   seed,
   prefix,
+  finish = false,
 }) {
   const lora = (model, name) => ({
     class_type: 'LoraLoaderModelOnly',
@@ -265,7 +266,35 @@ export function wanVideoWorkflow({
       },
     },
     15: { class_type: 'VAEDecode', inputs: { samples: ['14', 0], vae: ['4', 0] } },
-    16: { class_type: 'CreateVideo', inputs: { images: ['15', 0], fps: 16 } },
+    // finish: Real-ESRGAN ×2 и RIFE 4.9 ×2 (16 → 32 кадра/с) — ролик как после постпродакшна.
+    ...(finish
+      ? {
+          18: { class_type: 'UpscaleModelLoader', inputs: { model_name: 'RealESRGAN_x2plus.pth' } },
+          19: {
+            class_type: 'ImageUpscaleWithModel',
+            inputs: { upscale_model: ['18', 0], image: ['15', 0] },
+          },
+          20: {
+            class_type: 'RIFE VFI',
+            inputs: {
+              frames: ['19', 0],
+              ckpt_name: 'rife49.pth',
+              clear_cache_after_n_frames: 10,
+              multiplier: 2,
+              fast_mode: true,
+              ensemble: true,
+              scale_factor: 1,
+              dtype: 'float16',
+              torch_compile: false,
+              batch_size: 1,
+            },
+          },
+        }
+      : {}),
+    16: {
+      class_type: 'CreateVideo',
+      inputs: { images: [finish ? '20' : '15', 0], fps: finish ? 32 : 16 },
+    },
     17: {
       class_type: 'SaveVideo',
       inputs: { video: ['16', 0], filename_prefix: prefix, format: 'auto', codec: 'auto' },

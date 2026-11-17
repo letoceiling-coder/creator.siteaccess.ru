@@ -2,6 +2,7 @@ import { lazy } from 'react'
 import { Route, Routes } from 'react-router'
 import { AppFrame } from '@/components/layout/app-frame.tsx'
 import {
+  AnimatePage,
   CabinetPage,
   CatalogPage,
   CreatePage,
@@ -29,6 +30,7 @@ const tails = [
   ['/photos/:id/create', CreatePage],
   ['/jobs/:id', JobPage],
   ['/video', VideoPage],
+  ['/video/animate', AnimatePage],
   ['/video/:id', VideoItemPage],
   ['/video/:id/create', VideoCreatePage],
   ['/cabinet', CabinetPage],

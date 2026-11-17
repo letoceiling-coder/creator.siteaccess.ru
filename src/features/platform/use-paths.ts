@@ -17,6 +17,7 @@ export function usePaths() {
     video: `${base}/video`,
     videoItem: (id: string) => `${base}/video/${id}`,
     videoCreate: (id: string) => `${base}/video/${id}/create`,
+    animate: `${base}/video/animate`,
     cabinet: `${base}/cabinet`,
   }
 }
