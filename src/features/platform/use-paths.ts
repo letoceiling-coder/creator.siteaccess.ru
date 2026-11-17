@@ -15,6 +15,7 @@ export function usePaths() {
     create: (id: string) => `${base}/photos/${id}/create`,
     job: (id: string) => `${base}/jobs/${id}`,
     video: `${base}/video`,
+    videoItem: (id: string) => `${base}/video/${id}`,
     cabinet: `${base}/cabinet`,
   }
 }

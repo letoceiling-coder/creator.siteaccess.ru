@@ -27,7 +27,14 @@ test.describe('platform shell', () => {
     await page.goto('/telegram/photos', { waitUntil: 'domcontentloaded' })
     await expect(page.getByRole('navigation', { name: 'Разделы' })).toBeVisible()
 
-    for (const path of ['/photos', '/telegram/photos', '/max/photos/north', '/photos/north/create']) {
+    for (const path of [
+      '/photos',
+      '/telegram/photos',
+      '/max/photos/north',
+      '/photos/north/create',
+      '/video',
+      '/max/video/coast-run',
+    ]) {
       await page.goto(path, { waitUntil: 'domcontentloaded' })
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
       await expectNoHorizontalOverflow(page)

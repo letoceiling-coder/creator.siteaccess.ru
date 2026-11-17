@@ -1,6 +1,7 @@
 import { useNavigate, useParams } from 'react-router'
 import { Alert } from '@/components/ui/alert.tsx'
 import { scenarios } from '@/features/catalog/data.ts'
+import { videoTemplates } from '@/features/catalog/video-data.ts'
 import { usePaths } from '@/features/platform/use-paths.ts'
 import {
   CatalogScreen,
@@ -10,6 +11,7 @@ import {
   StubScreen,
   WizardScreen,
 } from './screens.tsx'
+import { VideoCatalogScreen, VideoDetailScreen } from './video-screens.tsx'
 
 function useScenario() {
   const { id } = useParams()
@@ -76,12 +78,18 @@ export function JobPage() {
 }
 
 export function VideoPage() {
-  return (
-    <StubScreen
-      title="Видеосценарии"
-      text="Ролики из сцен уже в каталоге, запуск откроется позже."
-    />
-  )
+  const navigate = useNavigate()
+  const paths = usePaths()
+  return <VideoCatalogScreen onOpen={(id) => void navigate(paths.videoItem(id))} />
+}
+
+export function VideoItemPage() {
+  const { id } = useParams()
+  const navigate = useNavigate()
+  const paths = usePaths()
+  const template = videoTemplates.find((v) => v.id === id)
+  if (!template) return <Missing />
+  return <VideoDetailScreen template={template} onCatalog={() => void navigate(paths.video)} />
 }
 
 export function CabinetPage() {

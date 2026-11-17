@@ -7,6 +7,7 @@ export function PosterCard({
   title,
   tag,
   frames,
+  unit = 'кадров',
   src,
   index,
   onOpen,
@@ -15,6 +16,7 @@ export function PosterCard({
   title: string
   tag: string
   frames: number
+  unit?: string
   src: string
   index: number
   onOpen: () => void
@@ -73,7 +75,9 @@ export function PosterCard({
         </span>
         <span className="absolute inset-x-0 bottom-0 grid gap-1 p-4 text-white">
           <span className="font-display text-title leading-[1.05]">{title}</span>
-          <span className="text-caption text-white/75">{frames} кадров</span>
+          <span className="text-caption text-white/75">
+            {frames} {unit}
+          </span>
         </span>
       </span>
     </motion.button>

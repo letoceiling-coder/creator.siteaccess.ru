@@ -48,11 +48,13 @@ export function AppFrame() {
 
   const backTo = /^\/photos\/[^/]+\/create$/.test(tail)
     ? paths.photo(tail.split('/')[2] ?? '')
-    : tail.startsWith('/photos/')
-      ? paths.photos
-      : tail.startsWith('/jobs/')
-        ? paths.home
-        : undefined
+    : tail.startsWith('/video/')
+      ? paths.video
+      : tail.startsWith('/photos/')
+        ? paths.photos
+        : tail.startsWith('/jobs/')
+          ? paths.home
+          : undefined
 
   const hrefs: Record<Tab, string> = {
     home: paths.home,
