@@ -89,11 +89,7 @@
 
 /* Перфорация: ряд прорезей по краю. */
 .perf {
-  background-image: radial-gradient(
-    circle at 50% 50%,
-    var(--canvas) 0 2.5px,
-    transparent 3px
-  );
+  background-image: radial-gradient(circle at 50% 50%, var(--canvas) 0 2.5px, transparent 3px);
   background-size: 100% 14px;
   background-repeat: repeat-y;
   background-position: center 4px;

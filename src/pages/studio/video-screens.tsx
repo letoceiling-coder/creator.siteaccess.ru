@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { ActionBar } from '@/components/studio/action-bar.tsx'
 import { ApertureTabs } from '@/components/studio/aperture-tabs.tsx'
 import { PosterCard } from '@/components/studio/poster-card.tsx'
+import { ClipPlayer } from '@/components/studio/clip-player.tsx'
 import { VideoPlayer } from '@/components/studio/video-player.tsx'
 import { StudioButton } from '@/components/studio/studio-button.tsx'
 import {
@@ -12,6 +13,7 @@ import {
   type VideoTemplate,
 } from '@/features/catalog/video-data.ts'
 import { videoTemplates } from '@/features/catalog/video-data.ts'
+import { useMedia } from '@/features/media/use-media.ts'
 import { cn } from '@/shared/cn.ts'
 
 function Label({ children }: { children: string }) {
@@ -26,6 +28,7 @@ function Label({ children }: { children: string }) {
 /* ───────────── Каталог шаблонов ───────────── */
 
 export function VideoCatalogScreen({ onOpen }: { onOpen: (id: string) => void }) {
+  const media = useMedia()
   const [category, setCategory] = useState<VideoCategoryId>('all')
   const list = useMemo(
     () => videoTemplates.filter((v) => category === 'all' || v.category === category),
@@ -64,7 +67,7 @@ export function VideoCatalogScreen({ onOpen }: { onOpen: (id: string) => void })
                 tag={`${v.seconds} с · ${v.ratio}`}
                 frames={v.shots.length}
                 unit="плана"
-                src={v.cover}
+                src={media.videos[v.id]?.poster ?? v.cover}
                 onOpen={() => onOpen(v.id)}
               />
             </motion.div>
@@ -109,10 +112,15 @@ export function VideoDetailScreen({
   template: VideoTemplate
   onCatalog: () => void
 }) {
+  const clip = useMedia().videos[template.id]
   const category = videoCategories.find((c) => c.id === template.category)?.label
   return (
     <div className="grid gap-8 px-4 pt-4 md:grid-cols-2 md:items-start md:gap-12 md:px-6 md:pt-6">
-      <VideoPlayer template={template} />
+      {clip ? (
+        <ClipPlayer clip={clip} title={template.title} />
+      ) : (
+        <VideoPlayer template={template} />
+      )}
       <div className="grid gap-8">
         <div className="grid gap-2">
           <span className="text-caption tracking-label text-accent uppercase">{category}</span>
@@ -150,8 +158,9 @@ export function VideoDetailScreen({
             <Equalizer bpm={template.music.bpm} />
           </div>
           <p className="text-caption text-ink-muted">
-            В превью играет синтезированный набросок настроения. Финальный трек подберётся по этому
-            описанию из лицензионной библиотеки.
+            {clip?.withMusic
+              ? 'Музыка в ролике создана ИИ по этому описанию. Для публикации трек заменят на лицензионный или проверят лицензию.'
+              : 'В превью играет синтезированный набросок настроения. Финальный трек подберётся по этому описанию.'}
           </p>
         </div>
 

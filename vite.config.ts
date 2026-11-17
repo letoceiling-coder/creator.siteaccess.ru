@@ -10,6 +10,10 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
+  server: {
+    // Образцы лежат на сервере: в разработке берём их с боевого сайта.
+    proxy: { '/media': { target: 'https://creator.siteaccess.ru', changeOrigin: true } },
+  },
   test: {
     environment: 'jsdom',
     setupFiles: './src/test/setup.ts',

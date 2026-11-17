@@ -9,6 +9,7 @@ import { ActionBar } from '@/components/studio/action-bar.tsx'
 import { StudioButton } from '@/components/studio/studio-button.tsx'
 import { UploadSlot } from '@/components/studio/upload-slot.tsx'
 import { cn } from '@/shared/cn.ts'
+import { LocationsGallery } from './locations-gallery.tsx'
 import {
   categories,
   heroDeck,
@@ -221,6 +222,7 @@ export function CatalogScreen({ onOpen }: { onOpen: (id: string) => void }) {
           ))}
         </AnimatePresence>
       </motion.div>
+      <LocationsGallery />
     </div>
   )
 }
