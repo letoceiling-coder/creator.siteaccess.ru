@@ -67,3 +67,13 @@ Safe area на устройстве с вырезом работает, пото
 ## Skills
 
 Как добавить инструкцию агента, описано в [docs/SKILLS.md](docs/SKILLS.md).
+
+## Выкладка
+
+Сайт: https://creator.siteaccess.ru. Nginx и сертификат Let's Encrypt настроены на сервере, продление автоматическое.
+
+```bash
+npm run deploy
+```
+
+Скрипт `scripts/deploy.mjs` собирает проект, заливает `dist/` по SSH (по ключу) и подменяет каталог сайта. Адрес, порт и пользователь переопределяются через `DEPLOY_HOST`, `DEPLOY_PORT`, `DEPLOY_USER`, `DEPLOY_PATH`. Готовая сборка без пересборки: `npm run deploy -- --skip-build`.
