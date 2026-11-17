@@ -1,0 +1,23 @@
+[Unit]
+Description=AI Creative Studio API (задачи генерации)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/creator-studio/api
+ExecStart=/usr/bin/node --disable-warning=ExperimentalWarning server.mjs
+Restart=on-failure
+RestartSec=5
+Environment=NODE_ENV=production
+Nice=5
+
+# Пишет только в свои каталоги и во вход/выход ComfyUI.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/creator-studio /var/www/creator-media /srv/comfyui/data/ComfyUI/input /srv/comfyui/data/ComfyUI/output
+
+[Install]
+WantedBy=multi-user.target

@@ -108,9 +108,11 @@ function Equalizer({ bpm }: { bpm: number }) {
 export function VideoDetailScreen({
   template,
   onCatalog,
+  onCreate,
 }: {
   template: VideoTemplate
   onCatalog: () => void
+  onCreate: () => void
 }) {
   const clip = useMedia().videos[template.id]
   const category = videoCategories.find((c) => c.id === template.category)?.label
@@ -130,7 +132,7 @@ export function VideoDetailScreen({
 
         <dl className="border-line grid grid-cols-3 border-y py-4 text-center">
           {[
-            ['Длина', `${template.seconds} с`],
+            ['Ролик', '5 с'],
             ['Формат', template.ratio],
             ['Фото', '1–3'],
           ].map(([term, value]) => (
@@ -166,11 +168,11 @@ export function VideoDetailScreen({
 
         <ActionBar>
           <div className={cn('grid gap-2 md:grid-cols-2')}>
-            <StudioButton variant="outline" onClick={onCatalog}>
-              Все шаблоны
+            <StudioButton arrow className="w-full md:order-2" onClick={onCreate}>
+              Создать со своим фото
             </StudioButton>
-            <StudioButton disabled className="w-full">
-              Запуск скоро
+            <StudioButton variant="outline" className="md:order-1" onClick={onCatalog}>
+              Все шаблоны
             </StudioButton>
           </div>
         </ActionBar>

@@ -12,7 +12,10 @@ export default defineConfig({
   },
   server: {
     // Образцы лежат на сервере: в разработке берём их с боевого сайта.
-    proxy: { '/media': { target: 'https://creator.siteaccess.ru', changeOrigin: true } },
+    proxy: {
+      '/media': { target: 'https://creator.siteaccess.ru', changeOrigin: true },
+      '/api': { target: 'https://creator.siteaccess.ru', changeOrigin: true },
+    },
   },
   test: {
     environment: 'jsdom',

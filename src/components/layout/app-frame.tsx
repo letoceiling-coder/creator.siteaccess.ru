@@ -46,15 +46,18 @@ export function AppFrame() {
   const miniapp = platform.reservesNavigationInset
   const showDock = Boolean(tab)
 
+  const segment = tail.split('/')[2] ?? ''
   const backTo = /^\/photos\/[^/]+\/create$/.test(tail)
-    ? paths.photo(tail.split('/')[2] ?? '')
-    : tail.startsWith('/video/')
-      ? paths.video
-      : tail.startsWith('/photos/')
-        ? paths.photos
-        : tail.startsWith('/jobs/')
-          ? paths.home
-          : undefined
+    ? paths.photo(segment)
+    : /^\/video\/[^/]+\/create$/.test(tail)
+      ? paths.videoItem(segment)
+      : tail.startsWith('/video/')
+        ? paths.video
+        : tail.startsWith('/photos/')
+          ? paths.photos
+          : tail.startsWith('/jobs/')
+            ? paths.cabinet
+            : undefined
 
   const hrefs: Record<Tab, string> = {
     home: paths.home,

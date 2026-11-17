@@ -44,7 +44,18 @@ function writeManifest() {
 }
 
 function toWebp(png, out, width, quality) {
-  execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', png, '-vf', `scale=${width}:-2`, '-quality', String(quality), out])
+  execFileSync('ffmpeg', [
+    '-y',
+    '-loglevel',
+    'error',
+    '-i',
+    png,
+    '-vf',
+    `scale=${width}:-2`,
+    '-quality',
+    String(quality),
+    out,
+  ])
 }
 
 async function make(job) {
@@ -88,7 +99,9 @@ if (cmd === 'status') {
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         await make(job)
-        console.log(`[${i + 1}/${todo.length}] ${job.id} за ${((Date.now() - t) / 1000).toFixed(0)} с`)
+        console.log(
+          `[${i + 1}/${todo.length}] ${job.id} за ${((Date.now() - t) / 1000).toFixed(0)} с`,
+        )
         break
       } catch (error) {
         console.error(`${job.id}, попытка ${attempt}: ${error.message}`)
@@ -97,7 +110,9 @@ if (cmd === 'status') {
       }
     }
   }
-  console.log(`Готово. Не удалось: ${failed}. Всего готово ${Object.keys(state.done).length}/${jobs.length}`)
+  console.log(
+    `Готово. Не удалось: ${failed}. Всего готово ${Object.keys(state.done).length}/${jobs.length}`,
+  )
 } else {
   console.error('Команды: run [--limit N], status')
   process.exit(1)

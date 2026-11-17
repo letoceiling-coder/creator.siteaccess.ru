@@ -16,6 +16,7 @@ export function usePaths() {
     job: (id: string) => `${base}/jobs/${id}`,
     video: `${base}/video`,
     videoItem: (id: string) => `${base}/video/${id}`,
+    videoCreate: (id: string) => `${base}/video/${id}/create`,
     cabinet: `${base}/cabinet`,
   }
 }

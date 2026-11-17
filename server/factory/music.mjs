@@ -7,7 +7,9 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { aceMusicWorkflow, download, runWorkflow } from './comfy.mjs'
 
-const templates = JSON.parse(readFileSync(new URL('./video-templates.json', import.meta.url), 'utf8'))
+const templates = JSON.parse(
+  readFileSync(new URL('./video-templates.json', import.meta.url), 'utf8'),
+)
 const root = process.env.MEDIA_DIR ?? '/var/www/creator-media'
 const dir = `${root}/music`
 const statePath = `${dir}/state.json`
@@ -15,7 +17,10 @@ mkdirSync(dir, { recursive: true })
 const state = existsSync(statePath) ? JSON.parse(readFileSync(statePath, 'utf8')) : { done: {} }
 
 const bright = new Set(['party', 'style', 'brand'])
-const keys = { bright: ['C major', 'G major', 'D major', 'F major'], dark: ['A minor', 'D minor', 'E minor', 'C minor'] }
+const keys = {
+  bright: ['C major', 'G major', 'D major', 'F major'],
+  dark: ['A minor', 'D minor', 'E minor', 'C minor'],
+}
 
 function describe(t) {
   return `${t.genre}, instrumental, ${t.mood}, modern production, clean mix, cinematic, background music for a short social video, no vocals`
@@ -46,9 +51,18 @@ async function make(t, index) {
   writeFileSync(tmp, await download(files[0]))
   // Нормализация громкости и мягкое затухание в конце.
   execFileSync('ffmpeg', [
-    '-y', '-loglevel', 'error', '-f', 'mp3', '-i', tmp,
-    '-af', `loudnorm=I=-14:TP=-1.5:LRA=11,afade=t=out:st=${seconds - 1.5}:d=1.5`,
-    '-b:a', '160k', `${dir}/${t.id}.mp3`,
+    '-y',
+    '-loglevel',
+    'error',
+    '-f',
+    'mp3',
+    '-i',
+    tmp,
+    '-af',
+    `loudnorm=I=-14:TP=-1.5:LRA=11,afade=t=out:st=${seconds - 1.5}:d=1.5`,
+    '-b:a',
+    '160k',
+    `${dir}/${t.id}.mp3`,
   ])
   rmSync(tmp)
   state.done[t.id] = { src: `/media/music/${t.id}.mp3`, bpm: t.bpm, seconds }
@@ -60,7 +74,10 @@ const limit = rest.includes('--limit') ? Number(rest[rest.indexOf('--limit') + 1
 if (cmd === 'status') {
   console.log(`${Object.keys(state.done).length} из ${templates.length} треков готово`)
 } else if (cmd === 'run') {
-  const todo = templates.map((t, i) => [t, i]).filter(([t]) => !state.done[t.id]).slice(0, limit)
+  const todo = templates
+    .map((t, i) => [t, i])
+    .filter(([t]) => !state.done[t.id])
+    .slice(0, limit)
   console.log(`К работе: ${todo.length} треков`)
   let failed = 0
   for (const [n, [t, i]] of todo.entries()) {
@@ -68,7 +85,9 @@ if (cmd === 'status') {
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         await make(t, i)
-        console.log(`[${n + 1}/${todo.length}] ${t.id} за ${((Date.now() - started) / 1000).toFixed(0)} с`)
+        console.log(
+          `[${n + 1}/${todo.length}] ${t.id} за ${((Date.now() - started) / 1000).toFixed(0)} с`,
+        )
         break
       } catch (error) {
         console.error(`${t.id}, попытка ${attempt}: ${error.message}`)
@@ -77,7 +96,9 @@ if (cmd === 'status') {
       }
     }
   }
-  console.log(`Готово. Не удалось: ${failed}. Всего ${Object.keys(state.done).length}/${templates.length}`)
+  console.log(
+    `Готово. Не удалось: ${failed}. Всего ${Object.keys(state.done).length}/${templates.length}`,
+  )
 } else {
   console.error('Команды: run [--limit N], status')
   process.exit(1)

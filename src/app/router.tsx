@@ -8,6 +8,7 @@ import {
   HomePage,
   JobPage,
   ScenarioPage,
+  VideoCreatePage,
   VideoItemPage,
   VideoPage,
 } from '@/pages/studio/routes.tsx'
@@ -29,6 +30,7 @@ const tails = [
   ['/jobs/:id', JobPage],
   ['/video', VideoPage],
   ['/video/:id', VideoItemPage],
+  ['/video/:id/create', VideoCreatePage],
   ['/cabinet', CabinetPage],
 ] as const
 
