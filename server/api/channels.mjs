@@ -356,6 +356,53 @@ export function channelsModule({ db, accounts, config, log }) {
     return [...new Set(problems)]
   }
 
+  /** Отправка готового поста в каналы; запись в историю. Возвращает итог по каждому каналу. */
+  async function publishPost({ authorId, text, button, files, targets, label = 'админ' }) {
+    const postId = randomBytes(10).toString('hex')
+    const post = { text, button }
+    st.insertPost.run(
+      postId,
+      authorId,
+      text,
+      JSON.stringify(files.map((f) => ({ kind: f.kind, name: f.name, size: f.size }))),
+      button ? JSON.stringify(button) : null,
+      Date.now(),
+    )
+    const results = []
+    for (const ch of targets) {
+      try {
+        const r =
+          ch.platform === 'telegram'
+            ? await publishTelegram(ch, post, files)
+            : await publishMax(ch, post, files)
+        results.push({ channel: ch.id, title: ch.title, platform: ch.platform, ok: true, ...r })
+      } catch (error) {
+        log(`пост ${postId.slice(0, 8)} → ${ch.id}: ${error.message}`)
+        results.push({
+          channel: ch.id,
+          title: ch.title,
+          platform: ch.platform,
+          ok: false,
+          error: error.message,
+        })
+      }
+    }
+    const status = results.every((r) => r.ok)
+      ? 'sent'
+      : results.some((r) => r.ok)
+        ? 'partial'
+        : 'failed'
+    st.finishPost.run(JSON.stringify(results), status, postId)
+    log(`${label}: пост ${postId.slice(0, 8)} — ${status}`)
+    return { id: postId, status, results }
+  }
+
+  /** Каналы по списку ID (пустой список — все, где бот может публиковать) и проверка поста. */
+  function targetsFor(ids) {
+    const all = st.list.all().filter((c) => c.can_post)
+    return ids?.length ? all.filter((c) => ids.includes(c.id)) : all
+  }
+
   const view = (c) => ({
     id: c.id,
     platform: c.platform,
@@ -367,6 +414,10 @@ export function channelsModule({ db, accounts, config, log }) {
 
   return {
     limits,
+    publishPost,
+    targetsFor,
+    validate,
+    channels: () => st.list.all().map(view),
     /** Канал MAX из события bot_added / bot_removed (вебхук бота). */
     async onMaxUpdate(update) {
       if (update.update_type === 'bot_added' && update.chat_id) {
@@ -473,47 +524,15 @@ export function channelsModule({ db, accounts, config, log }) {
           const problems = validate(post, files, targets)
           if (problems.length) throw new HttpError(400, problems.join('. '))
 
-          st.insertPost.run(
-            postId,
-            user.id,
+          const sent = await publishPost({
+            authorId: user.id,
             text,
-            JSON.stringify(files.map((f) => ({ kind: f.kind, name: f.name, size: f.size }))),
-            button ? JSON.stringify(button) : null,
-            Date.now(),
-          )
-          const results = []
-          for (const ch of targets) {
-            try {
-              const r =
-                ch.platform === 'telegram'
-                  ? await publishTelegram(ch, post, files)
-                  : await publishMax(ch, post, files)
-              results.push({
-                channel: ch.id,
-                title: ch.title,
-                platform: ch.platform,
-                ok: true,
-                ...r,
-              })
-            } catch (error) {
-              log(`пост ${postId.slice(0, 8)} → ${ch.id}: ${error.message}`)
-              results.push({
-                channel: ch.id,
-                title: ch.title,
-                platform: ch.platform,
-                ok: false,
-                error: error.message,
-              })
-            }
-          }
-          const status = results.every((r) => r.ok)
-            ? 'sent'
-            : results.some((r) => r.ok)
-              ? 'partial'
-              : 'failed'
-          st.finishPost.run(JSON.stringify(results), status, postId)
-          log(`админ ${user.id.slice(0, 8)}: пост ${postId.slice(0, 8)} — ${status}`)
-          return send(res, 201, { id: postId, status, results })
+            button,
+            files,
+            targets,
+            label: `админ ${user.id.slice(0, 8)}`,
+          })
+          return send(res, 201, sent)
         } finally {
           rmSync(dir, { recursive: true, force: true })
         }

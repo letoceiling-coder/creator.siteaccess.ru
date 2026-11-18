@@ -22,6 +22,8 @@ import { openDb } from './db.mjs'
 import { checkOrigin, cookies, HttpError, send, SESSION_COOKIE } from './http.mjs'
 import { botsModule } from './bots.mjs'
 import { channelsModule } from './channels.mjs'
+import { autopostModule } from './autopost.mjs'
+import { llmModule } from './llm.mjs'
 import { paymentsModule } from './payments.mjs'
 import { adminRoutes } from './routes-admin.mjs'
 import { authRoutes } from './routes-auth.mjs'
@@ -83,9 +85,19 @@ function ipOf(req) {
 const payments = paymentsModule({ db, accounts, config, log })
 const channels = channelsModule({ db, accounts, config, log })
 const bots = botsModule({ db, accounts, config, log, channels })
+const autopost = autopostModule({
+  db,
+  accounts,
+  config,
+  log,
+  q,
+  channels,
+  llm: llmModule({ accounts, log }),
+})
+if (env.WORKER !== 'off') autopost.start()
 if (env.WORKER !== 'off') bots.startTelegram()
 const handleAuth = authRoutes({ accounts, config, log, ipOf, payments, bots })
-const handleAdmin = adminRoutes({ accounts, db, q, log, payments, bots, channels })
+const handleAdmin = adminRoutes({ accounts, db, q, log, payments, bots, channels, autopost })
 
 function positionOf(job) {
   if (job.status !== 'queued') return 0
@@ -334,6 +346,7 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
     log('остановка')
     worker.stop()
     bots.stopTelegram()
+    autopost.stop()
     server.close(() => process.exit(0))
     setTimeout(() => process.exit(0), 5_000).unref()
   })

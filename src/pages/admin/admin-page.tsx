@@ -497,6 +497,7 @@ interface Integrations {
   vk: { enabled: boolean; clientId: string; clientSecret: Secret }
   telegram: { enabled: boolean; botUsername: string; botToken: Secret }
   max: { enabled: boolean; botToken: Secret }
+  openrouter: { enabled: boolean; apiKey: Secret; models: string }
 }
 
 function CopyLine({ value }: { value: string }) {
@@ -860,6 +861,29 @@ function IntegrationsPanel() {
             'Если у бота уже есть вебхуки других сайтов, сообщения будут приходить всем — поэтому для студии нужен свой бот.',
           ]}
           links={[['Платформа MAX для партнёров', 'https://dev.max.ru/']]}
+        />,
+      )}
+      {card(
+        'openrouter',
+        'OpenRouter — тексты и сценарии агента',
+        <div className="grid gap-3 sm:grid-cols-2">
+          {secretField('openrouter', 'apiKey', 'API-ключ OpenRouter', current.openrouter.apiKey)}
+          <TextField
+            id="openrouter-models"
+            label="Свои бесплатные модели (необязательно)"
+            placeholder="пусто — подбираются сами"
+            value={String(value('openrouter', 'models', current.openrouter.models))}
+            onChange={(e) => set('openrouter', 'models', e.target.value)}
+          />
+        </div>,
+        <Help
+          steps={[
+            'Создайте ключ на openrouter.ai (раздел Keys). Пополнять баланс не нужно: агент берёт только бесплатные модели (с окончанием :free и нулевой ценой).',
+            'Вставьте ключ сюда, включите и сохраните. Запросы идут через тот же прокси, что и Telegram.',
+            'Если OpenRouter недоступен или лимит бесплатных запросов исчерпан, агент сам переключится на модель на сервере (Ollama) — её имя задаётся на вкладке «Автопостинг».',
+            'Модели можно задать вручную через запятую, например deepseek/deepseek-chat-v3-0324:free. Платные модели игнорируются.',
+          ]}
+          links={[['OpenRouter: ключи', 'https://openrouter.ai/settings/keys']]}
         />,
       )}
       <StudioButton onClick={() => void save()}>Сохранить интеграции</StudioButton>
@@ -1678,10 +1702,425 @@ function Publications() {
   )
 }
 
+/* ── агент публикаций ── */
+
+interface AutopostSettings {
+  enabled: boolean
+  intervalMin: number
+  from: string
+  to: string
+  kinds: { photo: boolean; video: boolean }
+  channels: string[]
+  autoPublish: boolean
+  buttonText: string
+  llmModel: string
+}
+interface AutopostItem {
+  id: string
+  kind: 'photo' | 'video'
+  storyId: string
+  storyTitle: string
+  status: 'generating' | 'draft' | 'publishing' | 'published' | 'failed'
+  step?: string
+  text: string
+  media: { kind: 'photo' | 'video'; src: string; thumb: string }[]
+  button?: { text: string; url: string }
+  results: PostResult[]
+  error?: string
+  model?: string
+  createdAt: number
+}
+interface AutopostState {
+  settings: AutopostSettings
+  running: boolean
+  nextAt?: number
+  items: AutopostItem[]
+}
+
+const intervals = [
+  [30, '30 минут'],
+  [60, '1 час'],
+  [120, '2 часа'],
+  [180, '3 часа'],
+  [360, '6 часов'],
+  [720, '12 часов'],
+  [1440, 'раз в сутки'],
+] as const
+
+const autopostStatus: Record<AutopostItem['status'], string> = {
+  generating: 'Готовится',
+  draft: 'Черновик',
+  publishing: 'Публикуется',
+  published: 'Опубликован',
+  failed: 'Ошибка',
+}
+
+function AutopostDraft({
+  item,
+  onState,
+}: {
+  item: AutopostItem
+  onState: (s: AutopostState) => void
+}) {
+  const [text, setText] = useState(item.text)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string>()
+  const editable = item.status === 'draft'
+
+  async function act(path: string, init: RequestInit, ask?: string) {
+    if (ask && !window.confirm(ask)) return
+    setBusy(true)
+    setError(undefined)
+    try {
+      onState(await api<AutopostState>(path, init))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Ошибка')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <li className="grid gap-2 py-4">
+      <span className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-ink">
+          {item.kind === 'photo' ? 'Фотосессия' : 'Видео'} · {item.storyTitle}
+        </span>
+        <span
+          className={cn(
+            'text-caption uppercase',
+            item.status === 'published'
+              ? 'text-success'
+              : item.status === 'failed'
+                ? 'text-danger'
+                : 'text-ink-muted',
+          )}
+        >
+          {autopostStatus[item.status]}
+          {item.step ? ` · ${item.step}` : ''} · {dt(item.createdAt)}
+        </span>
+      </span>
+      {item.media.length ? (
+        <ul className="grid grid-cols-4 gap-1 sm:max-w-md">
+          {item.media.map((m) =>
+            m.kind === 'video' ? (
+              <li key={m.src} className="col-span-2 row-span-2">
+                <video
+                  src={m.src}
+                  poster={m.thumb}
+                  controls
+                  playsInline
+                  className="aspect-[9/16] w-full object-cover"
+                />
+              </li>
+            ) : (
+              <li key={m.src}>
+                <a href={m.src} target="_blank" rel="noreferrer">
+                  <img src={m.thumb} alt="" className="aspect-[3/4] w-full object-cover" />
+                </a>
+              </li>
+            ),
+          )}
+        </ul>
+      ) : null}
+      {editable ? (
+        <textarea
+          aria-label="Текст черновика"
+          className="border-line bg-canvas text-ink min-h-32 border p-3"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+        />
+      ) : item.text ? (
+        <p className="text-body text-ink break-words whitespace-pre-line">{item.text}</p>
+      ) : null}
+      {item.button ? (
+        <span className="text-caption text-ink-muted break-all">
+          Кнопка «{item.button.text}» → {item.button.url}
+        </span>
+      ) : null}
+      {item.model ? (
+        <span className="text-caption text-ink-muted">Текст и образ: {item.model}</span>
+      ) : null}
+      {item.error ? <span className="text-caption text-danger">{item.error}</span> : null}
+      {item.results.length ? <Results results={item.results} /> : null}
+      {editable || item.status === 'failed' ? (
+        <div className="flex flex-wrap gap-2">
+          {editable && text !== item.text ? (
+            <StudioButton
+              variant="outline"
+              disabled={busy}
+              onClick={() =>
+                void act(`/api/admin/autopost/${item.id}`, jsonInit('PATCH', { text }))
+              }
+            >
+              Сохранить текст
+            </StudioButton>
+          ) : null}
+          {item.media.length && text === item.text ? (
+            <StudioButton
+              disabled={busy}
+              onClick={() =>
+                void act(
+                  `/api/admin/autopost/${item.id}/publish`,
+                  { method: 'POST' },
+                  'Опубликовать этот пост в каналы?',
+                )
+              }
+            >
+              Опубликовать
+            </StudioButton>
+          ) : null}
+          <StudioButton
+            variant="quiet"
+            disabled={busy}
+            onClick={() =>
+              void act(`/api/admin/autopost/${item.id}`, { method: 'DELETE' }, 'Удалить черновик?')
+            }
+          >
+            Удалить
+          </StudioButton>
+        </div>
+      ) : null}
+      {error ? <Notice error={error} /> : null}
+    </li>
+  )
+}
+
+function Autopost() {
+  const { data, setData, error, reload } = useLoad<AutopostState>('/api/admin/autopost')
+  const channelsData = useLoad<{ channels: Channel[] }>('/api/admin/channels')
+  const [draft, setDraft] = useState<AutopostSettings>()
+  const [message, setMessage] = useState<{ error?: string; ok?: string }>({})
+  const [busy, setBusy] = useState(false)
+
+  // Пока агент готовит или публикует пост — обновляем ход работы.
+  const active =
+    data?.running || data?.items.some((i) => i.status === 'generating' || i.status === 'publishing')
+  useEffect(() => {
+    if (!active) return
+    const t = window.setInterval(reload, 4000)
+    return () => window.clearInterval(t)
+  }, [active, reload])
+
+  if (error) return <Notice error={error} />
+  if (!data) return <IrisLoader size={32} label="Загрузка" />
+
+  const cfg = draft ?? data.settings
+  const channels = (channelsData.data?.channels ?? []).filter((c) => c.canPost)
+  const set = (patch: Partial<AutopostSettings>) => setDraft({ ...cfg, ...patch })
+
+  async function save(patch?: Partial<AutopostSettings>) {
+    const next = { ...cfg, ...patch }
+    setBusy(true)
+    setMessage({})
+    try {
+      const res = await api<AutopostState>('/api/admin/autopost', jsonInit('PUT', next))
+      setData(res)
+      setDraft(res.settings)
+      setMessage({ ok: res.settings.enabled ? 'Агент включён' : 'Сохранено, агент выключен' })
+    } catch (e) {
+      setMessage({ error: e instanceof Error ? e.message : 'Ошибка' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function runNow(publish: boolean) {
+    if (publish && !window.confirm('Сгенерировать пост и сразу опубликовать в каналы?')) return
+    setBusy(true)
+    setMessage({})
+    try {
+      setData(await api<AutopostState>('/api/admin/autopost/run', jsonInit('POST', { publish })))
+      setMessage({ ok: 'Агент начал готовить пост — это займёт несколько минут' })
+    } catch (e) {
+      setMessage({ error: e instanceof Error ? e.message : 'Ошибка' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="grid gap-8">
+      <Section title="Агент публикаций">
+        <p className="text-body text-ink-muted">
+          Раз в заданный интервал агент выбирает сюжет каталога, генерирует фотосессию из четырёх
+          кадров или ролик около 10 секунд с музыкой, пишет текст и публикует пост с кнопкой на
+          сюжет. Фото и видео чередуются, сюжеты не повторяются подряд. Задачи пользователей всегда
+          идут первыми: если очередь занята, агент ждёт.
+        </p>
+        <div className="bg-canvas-sunken grid gap-4 p-4">
+          <Checkbox
+            label="Агент включён"
+            checked={cfg.enabled}
+            onChange={(e) => set({ enabled: e.target.checked })}
+          />
+          <div className="grid gap-3 sm:grid-cols-3">
+            <label className="grid gap-1">
+              <span className="text-caption text-ink-muted">Как часто</span>
+              <select
+                className="border-line bg-canvas text-ink min-h-11 border px-3"
+                value={cfg.intervalMin}
+                onChange={(e) => set({ intervalMin: Number(e.target.value) })}
+              >
+                {intervals.map(([v, label]) => (
+                  <option key={v} value={v}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="grid gap-1">
+              <span className="text-caption text-ink-muted">Публиковать с (МСК)</span>
+              <input
+                type="time"
+                className="border-line bg-canvas text-ink min-h-11 border px-3"
+                value={cfg.from}
+                onChange={(e) => set({ from: e.target.value })}
+              />
+            </label>
+            <label className="grid gap-1">
+              <span className="text-caption text-ink-muted">до (МСК)</span>
+              <input
+                type="time"
+                className="border-line bg-canvas text-ink min-h-11 border px-3"
+                value={cfg.to}
+                onChange={(e) => set({ to: e.target.value })}
+              />
+            </label>
+          </div>
+          <fieldset className="grid gap-1">
+            <legend className="text-caption text-ink-muted mb-1">Что публиковать</legend>
+            <Checkbox
+              label="Фотосессии (4 кадра)"
+              checked={cfg.kinds.photo}
+              onChange={(e) => set({ kinds: { ...cfg.kinds, photo: e.target.checked } })}
+            />
+            <Checkbox
+              label="Видео (≈10 с, с музыкой)"
+              checked={cfg.kinds.video}
+              onChange={(e) => set({ kinds: { ...cfg.kinds, video: e.target.checked } })}
+            />
+          </fieldset>
+          <fieldset className="grid gap-1">
+            <legend className="text-caption text-ink-muted mb-1">
+              Каналы (ничего не отмечено — все, где бот может публиковать)
+            </legend>
+            {channels.length === 0 ? (
+              <p className="text-caption text-ink-muted">
+                Каналов пока нет — добавьте их на вкладке «Публикации».
+              </p>
+            ) : (
+              channels.map((c) => (
+                <Checkbox
+                  key={c.id}
+                  label={`${platformName[c.platform]} · ${c.title}`}
+                  checked={cfg.channels.includes(c.id)}
+                  onChange={(e) =>
+                    set({
+                      channels: e.target.checked
+                        ? [...cfg.channels, c.id]
+                        : cfg.channels.filter((id) => id !== c.id),
+                    })
+                  }
+                />
+              ))
+            )}
+          </fieldset>
+          <fieldset className="grid gap-1">
+            <legend className="text-caption text-ink-muted mb-1">Режим</legend>
+            <label className="flex min-h-11 items-center gap-3">
+              <input
+                type="radio"
+                name="autopost-mode"
+                checked={cfg.autoPublish}
+                onChange={() => set({ autoPublish: true })}
+              />
+              <span className="text-ink">Публиковать сразу</span>
+            </label>
+            <label className="flex min-h-11 items-center gap-3">
+              <input
+                type="radio"
+                name="autopost-mode"
+                checked={!cfg.autoPublish}
+                onChange={() => set({ autoPublish: false })}
+              />
+              <span className="text-ink">Сохранять черновики — публикую сам после проверки</span>
+            </label>
+          </fieldset>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <TextField
+              id="autopost-button"
+              label="Текст кнопки под постом"
+              value={cfg.buttonText}
+              maxLength={64}
+              onChange={(e) => set({ buttonText: e.target.value })}
+            />
+            <TextField
+              id="autopost-model"
+              label="Запасная модель на сервере (Ollama)"
+              value={cfg.llmModel}
+              onChange={(e) => set({ llmModel: e.target.value })}
+            />
+          </div>
+          <p className="text-caption text-ink-muted">
+            {data.settings.enabled && data.nextAt
+              ? `Следующий пост — около ${dt(data.nextAt)}.`
+              : 'Агент выключен.'}{' '}
+            {data.running ? 'Сейчас агент готовит пост.' : ''}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <StudioButton disabled={busy} onClick={() => void save()}>
+              Сохранить
+            </StudioButton>
+            <StudioButton
+              variant="outline"
+              disabled={busy || data.running}
+              onClick={() => void runNow(false)}
+            >
+              Сделать черновик сейчас
+            </StudioButton>
+            <StudioButton
+              variant="quiet"
+              disabled={busy || data.running}
+              onClick={() => void runNow(true)}
+            >
+              Сделать и опубликовать
+            </StudioButton>
+          </div>
+          <Notice {...message} />
+        </div>
+      </Section>
+      <Section title="Посты агента">
+        {data.items.length === 0 ? (
+          <p className="text-caption text-ink-muted">Агент ещё ничего не готовил.</p>
+        ) : (
+          <ul className="divide-line border-line grid divide-y border-y">
+            {data.items.map((item) => (
+              <AutopostDraft
+                key={`${item.id}-${item.status}-${item.text.length}`}
+                item={item}
+                onState={setData}
+              />
+            ))}
+          </ul>
+        )}
+      </Section>
+    </div>
+  )
+}
+
 /* ── страница ── */
 
 type Tab =
-  'overview' | 'users' | 'tariffs' | 'pricing' | 'payments' | 'integrations' | 'posts' | 'jobs'
+  | 'overview'
+  | 'users'
+  | 'tariffs'
+  | 'pricing'
+  | 'payments'
+  | 'integrations'
+  | 'posts'
+  | 'autopost'
+  | 'jobs'
 const tabs: { id: Tab; label: string }[] = [
   { id: 'overview', label: 'Сводка' },
   { id: 'users', label: 'Пользователи' },
@@ -1690,6 +2129,7 @@ const tabs: { id: Tab; label: string }[] = [
   { id: 'payments', label: 'Оплата' },
   { id: 'integrations', label: 'Интеграции' },
   { id: 'posts', label: 'Публикации' },
+  { id: 'autopost', label: 'Автопостинг' },
   { id: 'jobs', label: 'Задачи' },
 ]
 
@@ -1729,6 +2169,7 @@ export function AdminPage() {
       {tab === 'payments' ? <PaymentsPanel /> : null}
       {tab === 'integrations' ? <IntegrationsPanel /> : null}
       {tab === 'posts' ? <Publications /> : null}
+      {tab === 'autopost' ? <Autopost /> : null}
       {tab === 'jobs' ? <Jobs /> : null}
     </div>
   )

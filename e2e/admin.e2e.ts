@@ -155,4 +155,108 @@ test.describe('admin publications', () => {
     await page.goto('/cabinet', { waitUntil: 'domcontentloaded' })
     await expect(page.getByRole('button', { name: 'Выйти' })).toBeVisible()
   })
+
+  test('autopost: settings, draft review and publish', async ({ page }) => {
+    await json(page, '**/api/me', me('admin'))
+    await json(page, '**/api/admin/stats', {
+      users: 1,
+      usersToday: 0,
+      jobsToday: 0,
+      queued: 0,
+      running: 0,
+      failedToday: 0,
+      spentToday: 0,
+    })
+    await page.route(/\/media\/autopost\//, (route) =>
+      route.fulfill({ contentType: 'image/jpeg', body: photo }),
+    )
+    await json(page, '**/api/admin/channels', {
+      channels: [
+        {
+          id: 'telegram:-100500',
+          platform: 'telegram',
+          chatId: '-100500',
+          title: 'Studio',
+          canPost: true,
+        },
+      ],
+      limits,
+    })
+    const settings = {
+      enabled: false,
+      intervalMin: 60,
+      from: '09:00',
+      to: '21:00',
+      kinds: { photo: true, video: true },
+      channels: [],
+      autoPublish: true,
+      buttonText: '⚡ Сгенерировать ⚡',
+      llmModel: 'qwen3.6-128k:latest',
+    }
+    const draft = {
+      id: 'abc12345xyz',
+      kind: 'photo',
+      storyId: 'peony-gold',
+      storyTitle: 'Пионы и золото',
+      status: 'draft',
+      text: 'Пионы и золото 🤍\n\nНовый сюжет: **белые пионы**.\n\n📸 Жми на кнопку ниже↓',
+      media: [0, 1, 2, 3].map((i) => ({
+        kind: 'photo',
+        src: `/media/autopost/abc12345xyz/${i}.jpg`,
+        thumb: `/media/autopost/abc12345xyz/${i}-thumb.webp`,
+      })),
+      button: {
+        text: '⚡ Сгенерировать ⚡',
+        url: 'https://creator.siteaccess.ru/photos/peony-gold',
+      },
+      results: [],
+      createdAt: Date.now(),
+    }
+    let saved: Record<string, unknown> = {}
+    let published = false
+    await page.route('**/api/admin/autopost', async (route) => {
+      if (route.request().method() === 'PUT') saved = route.request().postDataJSON()
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          settings: { ...settings, ...saved },
+          running: false,
+          nextAt: saved.enabled ? Date.now() + 3_600_000 : undefined,
+          items: [draft],
+        }),
+      })
+    })
+    await page.route('**/api/admin/autopost/abc12345xyz/publish', async (route) => {
+      published = true
+      await route.fulfill({
+        status: 202,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          settings: { ...settings, ...saved },
+          running: false,
+          items: [{ ...draft, status: 'publishing' }],
+        }),
+      })
+    })
+
+    await page.goto('/admin', { waitUntil: 'domcontentloaded' })
+    await page.getByRole('tab', { name: 'Автопостинг' }).click()
+    await expect(page.getByRole('heading', { name: 'Агент публикаций' })).toBeVisible()
+    await page.getByText('Агент включён', { exact: true }).click()
+    await expect(page.getByLabel('Агент включён')).toBeChecked()
+    await page.getByLabel('Как часто').selectOption('120')
+    await page.getByLabel('Публиковать с (МСК)').fill('10:00')
+    await page.getByRole('button', { name: 'Сохранить', exact: true }).click()
+    await expect(page.getByText('Агент включён', { exact: true }).last()).toBeVisible()
+    expect(saved).toMatchObject({ enabled: true, intervalMin: 120, from: '10:00', to: '21:00' })
+    await expect(page.getByText('Следующий пост — около')).toBeVisible()
+
+    await expect(page.getByLabel('Текст черновика')).toHaveValue(draft.text)
+    await expect(page.locator('img[src$="-thumb.webp"]')).toHaveCount(4)
+    await noOverflow(page)
+    page.once('dialog', (d) => void d.accept())
+    await page.getByRole('button', { name: 'Опубликовать', exact: true }).click()
+    await expect(page.getByText('Публикуется', { exact: false })).toBeVisible()
+    expect(published).toBe(true)
+  })
 })

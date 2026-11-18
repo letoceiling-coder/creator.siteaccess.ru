@@ -1,7 +1,7 @@
 /** Админка: пользователи и балансы, тарифы, цены и бонусы, интеграции, задачи. */
 import { HttpError, readJson, send } from './http.mjs'
 
-const SECRET_KEYS = ['clientSecret', 'botToken', 'secretKey', 'password']
+const SECRET_KEYS = ['clientSecret', 'botToken', 'secretKey', 'password', 'apiKey']
 const HIDDEN_KEYS = ['webhookFor']
 const mask = (v) => (v ? `••••${String(v).slice(-4)}` : '')
 
@@ -12,7 +12,7 @@ const int = (v, min, max, name) => {
   return n
 }
 
-export function adminRoutes({ accounts, db, q, log, payments, bots, channels }) {
+export function adminRoutes({ accounts, db, q, log, payments, bots, channels, autopost }) {
   const st = {
     stats: db.prepare(`SELECT
       (SELECT COUNT(*) FROM users) AS users,
@@ -87,6 +87,7 @@ export function adminRoutes({ accounts, db, q, log, payments, bots, channels }) 
     if (!user) throw new HttpError(401, 'Войдите в аккаунт')
     if (user.role !== 'admin') throw new HttpError(403, 'Нужны права администратора')
     if (channels?.owns(path)) return channels.handle(req, res, path, user)
+    if (autopost?.owns(path)) return autopost.handle(req, res, path, user)
     const method = req.method
     const day = Date.now() - 86_400_000
 

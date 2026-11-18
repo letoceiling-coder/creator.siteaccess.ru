@@ -10,6 +10,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { after, before, test } from 'node:test'
 import { tbankToken } from './payments.mjs'
+import { inWindow, nextRunAt } from './autopost.mjs'
 
 const port = 3900 + Math.floor(Math.random() * 500)
 const base = `http://127.0.0.1:${port}`
@@ -87,6 +88,66 @@ const fakeServer = createServer(async (req, res) => {
         result: JSON.parse(body.media).map((_m, i) => ({ message_id: id + i })),
       })
     return reply({ ok: true, result: { message_id: id } })
+  }
+  // OpenRouter: список моделей и ответы; fake.orDown — сервис недоступен.
+  if (req.url?.startsWith('/or/')) {
+    assert.equal(req.headers.authorization, 'Bearer sk-or-test-key')
+    if (req.url === '/or/models')
+      return reply({
+        data: [
+          {
+            id: 'openai/gpt-paid',
+            pricing: { prompt: '0.00001', completion: '0.00003' },
+            context_length: 128000,
+          },
+          {
+            id: 'meta-llama/llama-3.3-70b-instruct:free',
+            pricing: { prompt: '0', completion: '0' },
+            context_length: 65536,
+          },
+          {
+            id: 'deepseek/deepseek-chat-v3-0324:free',
+            pricing: { prompt: '0', completion: '0' },
+            context_length: 163840,
+          },
+        ],
+      })
+    fake.or = [...(fake.or ?? []), body.model]
+    if (fake.orDown)
+      return reply(
+        { error: { code: 429, message: 'Rate limit exceeded: free-models-per-day' } },
+        429,
+      )
+    return reply({
+      choices: [
+        {
+          message: {
+            content:
+              '```json\n' +
+              JSON.stringify({
+                title: 'Золотой час ✨',
+                body: 'Тёплый свет и **кадры как из журнала**.',
+                cta: '📸 Создай такую же фотосессию со своим лицом — жми на кнопку ниже↓',
+                look: 'cream knitted sweater, loose waves, delicate gold earrings',
+              }) +
+              '\n```',
+          },
+        },
+      ],
+    })
+  }
+  // Локальная языковая модель (Ollama) для текстов агента.
+  if (req.url === '/ollama/api/chat') {
+    fake.llm = body
+    return reply({
+      message: {
+        content: JSON.stringify({
+          title: 'Утро в цветах 🌸',
+          body: 'Нежный свет и **букет пионов в руках** — <b>кадры</b> как из журнала. #тег',
+          cta: '📸 Хочешь такую же фотосессию со своим лицом? Жми на кнопку ниже↓',
+        }),
+      },
+    })
   }
   // Загрузка файлов MAX: адрес загрузки → файл → токен.
   if (req.url?.startsWith('/max/uploads?type=')) {
@@ -181,6 +242,12 @@ env.TBANK_URL = `http://127.0.0.1:${fakePort}/tb`
 env.MAX_API_URL = `http://127.0.0.1:${fakePort}/max`
 env.TELEGRAM_API_URL = `http://127.0.0.1:${fakePort}/tg`
 env.TELEGRAM_PROXY = ''
+env.OLLAMA_URL = `http://127.0.0.1:${fakePort}/ollama`
+env.OPENROUTER_URL = `http://127.0.0.1:${fakePort}/or`
+env.OPENROUTER_PROXY = ''
+env.AUTOPOST_TEST_IMAGE = fileURLToPath(
+  new URL('../../src/assets/playground/portrait-day.jpg', import.meta.url),
+)
 
 before(async () => {
   await new Promise((resolve) => fakeServer.listen(fakePort, '127.0.0.1', resolve))
@@ -764,4 +831,146 @@ test('публикации в каналы: только админ, прове�
     (await adm('/api/admin/channels/max:-7001', { method: 'DELETE' })).data.channels.length,
     1,
   )
+})
+
+test('агент публикаций: окно времени по Москве и следующий запуск', () => {
+  // 07:30 UTC = 10:30 МСК
+  const at = (utc) => new Date(`2026-11-18T${utc}:00Z`)
+  assert.equal(inWindow('09:00', '21:00', at('07:30')), true)
+  assert.equal(inWindow('09:00', '21:00', at('19:30')), false)
+  assert.equal(inWindow('22:00', '02:00', at('20:30')), true)
+  assert.equal(inWindow('22:00', '02:00', at('09:00')), false)
+  const cfg = { intervalMin: 60, from: '09:00', to: '21:00' }
+  const now = at('07:30').getTime()
+  assert.equal(nextRunAt(cfg, now - 30 * 60_000, now), now + 30 * 60_000)
+  // Ночью ждёт начала окна: 19:30 UTC (22:30 МСК) → 06:00 UTC (09:00 МСК).
+  assert.equal(nextRunAt(cfg, 0, at('19:30').getTime()), new Date('2026-11-19T06:00:00Z').getTime())
+})
+
+test('агент публикаций: настройки, черновик с текстом модели, правка и публикация', async () => {
+  const { call } = await newUser()
+  assert.equal((await call('/api/admin/autopost')).status, 403)
+  const adm = await admin()
+  const initial = await adm('/api/admin/autopost')
+  assert.equal(initial.data.settings.enabled, false)
+  assert.equal(initial.data.settings.intervalMin, 60)
+
+  assert.equal(
+    (await adm('/api/admin/autopost', { method: 'PUT', json: { intervalMin: 5 } })).status,
+    400,
+  )
+  assert.equal(
+    (await adm('/api/admin/autopost', { method: 'PUT', json: { from: '25:00' } })).status,
+    400,
+  )
+  assert.equal(
+    (
+      await adm('/api/admin/autopost', {
+        method: 'PUT',
+        json: { kinds: { photo: false, video: false } },
+      })
+    ).status,
+    400,
+  )
+  const saved = await adm('/api/admin/autopost', {
+    method: 'PUT',
+    json: {
+      enabled: true,
+      intervalMin: 120,
+      from: '10:00',
+      to: '20:00',
+      kinds: { photo: true, video: false },
+    },
+  })
+  assert.equal(saved.status, 200, JSON.stringify(saved.data))
+  assert.equal(saved.data.settings.intervalMin, 120)
+  assert.ok(saved.data.nextAt)
+  await adm('/api/admin/autopost', { method: 'PUT', json: { enabled: false } })
+
+  const started = await adm('/api/admin/autopost/run', { method: 'POST', json: { publish: false } })
+  assert.equal(started.status, 202, JSON.stringify(started.data))
+  let item
+  for (let i = 0; i < 50; i++) {
+    item = (await adm('/api/admin/autopost')).data.items[0]
+    if (item.status !== 'generating') break
+    await new Promise((r) => setTimeout(r, 100))
+  }
+  assert.equal(item.status, 'draft', JSON.stringify(item))
+  assert.equal(item.kind, 'photo')
+  assert.equal(item.media.length, 4)
+  // Текст модели: без HTML и хэштегов, с жирным фрагментом и призывом.
+  assert.equal(
+    item.text,
+    [
+      'Утро в цветах 🌸',
+      'Нежный свет и **букет пионов в руках** — bкадры/b как из журнала.',
+      '📸 Хочешь такую же фотосессию со своим лицом? Жми на кнопку ниже↓',
+    ].join('\n\n'),
+  )
+  assert.equal(fake.llm.think, false)
+  assert.match(item.button.url, /^https:\/\/creator\.example\/photos\/[\w-]+$/)
+
+  const patched = await adm(`/api/admin/autopost/${item.id}`, {
+    method: 'PATCH',
+    json: { text: 'Новый текст **поста**' },
+  })
+  assert.equal(patched.data.items[0].text, 'Новый текст **поста**')
+
+  fake.tg.length = 0
+  assert.equal(
+    (await adm(`/api/admin/autopost/${item.id}/publish`, { method: 'POST' })).status,
+    202,
+  )
+  for (let i = 0; i < 50; i++) {
+    item = (await adm('/api/admin/autopost')).data.items[0]
+    if (item.status !== 'publishing') break
+    await new Promise((r) => setTimeout(r, 100))
+  }
+  assert.equal(item.status, 'published', JSON.stringify(item))
+  const group = fake.tg.find((c) => c.method === 'sendMediaGroup')
+  assert.equal(JSON.parse(group.body.media).length, 4)
+  assert.equal(JSON.parse(group.body.media)[0].caption, 'Новый текст <b>поста</b>')
+  // Опубликованный пост не удаляется и не правится.
+  assert.equal((await adm(`/api/admin/autopost/${item.id}`, { method: 'DELETE' })).status, 409)
+})
+
+test('агент публикаций: бесплатные модели OpenRouter, запасная модель на сервере', async () => {
+  const adm = await admin()
+  const saved = await adm('/api/admin/integrations', {
+    method: 'PUT',
+    json: { openrouter: { enabled: true, apiKey: 'sk-or-test-key' } },
+  })
+  assert.equal(saved.data.integrations.openrouter.apiKey.set, true)
+  assert.ok(!JSON.stringify(saved.data).includes('sk-or-test-key'))
+
+  const runDraft = async () => {
+    await adm('/api/admin/autopost/run', { method: 'POST', json: { publish: false } })
+    let item
+    for (let i = 0; i < 80; i++) {
+      item = (await adm('/api/admin/autopost')).data.items[0]
+      if (item.status !== 'generating') break
+      await new Promise((r) => setTimeout(r, 100))
+    }
+    return item
+  }
+
+  fake.or = []
+  const viaOr = await runDraft()
+  assert.equal(viaOr.status, 'draft', JSON.stringify(viaOr))
+  // Только бесплатные модели, предпочтительная — первой.
+  assert.deepEqual(fake.or, ['deepseek/deepseek-chat-v3-0324:free'])
+  assert.equal(viaOr.model, 'openrouter:deepseek/deepseek-chat-v3-0324:free')
+  assert.match(viaOr.text, /^Золотой час ✨\n\nТёплый свет/)
+
+  // Лимит исчерпан на всех бесплатных моделях — текст пишет серверная модель.
+  fake.or = []
+  fake.orDown = true
+  const fallback = await runDraft()
+  fake.orDown = false
+  assert.deepEqual(fake.or, [
+    'deepseek/deepseek-chat-v3-0324:free',
+    'meta-llama/llama-3.3-70b-instruct:free',
+  ])
+  assert.match(fallback.model, /^ollama:/)
+  assert.match(fallback.text, /^Утро в цветах/)
 })
