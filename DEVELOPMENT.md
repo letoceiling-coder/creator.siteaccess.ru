@@ -77,3 +77,5 @@ npm run deploy
 ```
 
 Скрипт `scripts/deploy.mjs` собирает проект, заливает `dist/` по SSH (по ключу) и подменяет каталог сайта. Адрес, порт и пользователь переопределяются через `DEPLOY_HOST`, `DEPLOY_PORT`, `DEPLOY_USER`, `DEPLOY_PATH`. Готовая сборка без пересборки: `npm run deploy -- --skip-build`.
+
+Кэширование на сервере (nginx, `/etc/nginx/sites-enabled/creator.siteaccess.ru`): страницы (`index.html` и все пути SPA) отдаются с `Cache-Control: no-cache` — браузер каждый раз сверяет версию и после выкладки сразу получает новую. Файлы `/assets/` с хэшем в имени кэшируются на год (`immutable`).
