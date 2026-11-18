@@ -22,7 +22,14 @@ import {
   wanVideoWorkflow,
 } from '../factory/comfy.mjs'
 import { assembleShots, encode } from '../factory/assemble.mjs'
-import { imageHasFace, MIN_FACE_RATIO, MIN_PAIR_RATIO, videoFaceRatio } from '../factory/faces.mjs'
+import {
+  faceCrop,
+  imageIdentity,
+  MIN_FACE_RATIO,
+  MIN_PAIR_RATIO,
+  SAME_PERSON,
+  videoFaceRatio,
+} from '../factory/faces.mjs'
 import { toJpeg, toWebp } from './images.mjs'
 import { negative, planFor } from './presets.mjs'
 
@@ -31,6 +38,13 @@ const run = promisify(execFile)
 class Cancelled extends Error {}
 
 const now = () => Date.now()
+
+/** Цель по сходству лица (SFace): ниже — кадр пересоздаётся (порог «тот же человек» 0.363). */
+const GOOD_LIKENESS = Math.max(SAME_PERSON, Number(process.env.GOOD_LIKENESS ?? 0.5))
+/** Доля кадров ролика, где лицо — тот же человек, что на фото. */
+const MIN_SAME_RATIO = 0.8
+const cropHint =
+  " The second reference image is a close-up of the same person's face: reproduce exactly this face — eye shape, nose, lips, jawline, eyebrows, skin tone and hairline."
 
 async function withRetry(fn, attempts = 2) {
   let last
@@ -69,21 +83,33 @@ export function startWorker({ q, config, log, onFinish = () => {} }) {
     }
   }
 
-  async function uploadPhotos(job) {
-    const names = []
-    for (let i = 0; i < job.photos; i++) {
-      const buf = readFileSync(join(config.uploadDir, job.id, `${i}.png`))
-      names.push(await uploadImage(buf, `creator-u-${job.id}-${i}.png`))
+  /**
+   * Референсы для модели: фото пользователя и, для одного героя, крупный план его лица —
+   * так модель видит черты лица в высоком разрешении (замер SFace: сходство выше на ~0.1).
+   * refs — исходные фото для сравнения лиц на готовых кадрах.
+   */
+  async function prepareRefs(job, people = 1) {
+    const refs = []
+    for (let i = 0; i < job.photos; i++)
+      refs.push(readFileSync(join(config.uploadDir, job.id, `${i}.png`)))
+    const images = []
+    for (const [i, buf] of refs.entries())
+      images.push(await uploadImage(buf, `creator-u-${job.id}-${i}.png`))
+    let crop
+    if (people === 1) crop = await faceCrop(refs[0]).catch(() => undefined)
+    if (crop) {
+      // Модель принимает до трёх изображений: первое фото, крупный план лица, второе фото.
+      images.splice(1, 0, await uploadImage(crop, `creator-u-${job.id}-face.png`))
     }
-    return names
+    return { images: images.slice(0, 3), refs, hint: crop ? cropHint : '' }
   }
 
-  async function edit(job, images, shot, index, upscale) {
+  async function edit(job, ref, shot, index, upscale) {
     const files = await withRetry(() =>
       runWorkflow(
         qwenEditWorkflow({
-          images,
-          prompt: shot.prompt,
+          images: ref.images,
+          prompt: shot.prompt + ref.hint,
           negative,
           seed: shot.seed,
           width: shot.width,
@@ -98,46 +124,55 @@ export function startWorker({ q, config, log, onFinish = () => {} }) {
   }
 
   /** Проверка качества не должна ронять задачу: если детектор недоступен, кадр принимается. */
-  async function faceOk(buffer, minFaces = 1) {
+  async function identity(buffer, refs, minFaces = 1) {
     try {
-      return (await imageHasFace(buffer, minFaces)).ok
+      return await imageIdentity(buffer, refs, minFaces)
     } catch (error) {
       log(`проверка лица недоступна: ${error.message}`)
-      return true
+      return { ok: true, similarity: 1 }
     }
   }
 
-  async function faceRatio(file, minFaces = 1) {
+  async function clipIdentity(file, refs, minFaces = 1) {
     try {
-      return (await videoFaceRatio(file, minFaces)).ratio
+      return await videoFaceRatio(file, minFaces, refs)
     } catch (error) {
       log(`проверка лица недоступна: ${error.message}`)
-      return 1
+      return { ratio: 1, sameRatio: 1, similarity: 1 }
     }
   }
 
-  /** Кадр, где лицо видно целиком: до трёх попыток с разными сидами. */
-  async function editWithFace(job, images, shot, index, upscale, minFaces = 1) {
-    let first
+  /**
+   * Кадр, где лицо видно целиком и это тот же человек, что на фото: до трёх попыток с разными
+   * сидами, иначе — самый похожий из удачных по композиции.
+   */
+  async function editWithFace(job, ref, shot, index, upscale, minFaces = 1) {
+    let best = { score: -Infinity, buf: undefined }
     for (let attempt = 0; attempt < 3; attempt++) {
       checkCancel(job.id)
       const buf = await edit(
         job,
-        images,
+        ref,
         { ...shot, seed: shot.seed + attempt * 1009 },
         index,
         upscale,
       )
-      first ??= buf
-      if (await faceOk(buf, minFaces)) return buf
-      log(`задача ${job.id.slice(0, 8)}: кадр ${index + 1} без лица, попытка ${attempt + 2}`)
+      const id = await identity(buf, ref.refs, minFaces)
+      const similarity = id.similarity ?? (id.ok ? 1 : 0)
+      const score = (id.ok ? 1 : 0) + similarity
+      if (score > best.score) best = { score, buf }
+      if (id.ok && similarity >= GOOD_LIKENESS) return buf
+      log(
+        `задача ${job.id.slice(0, 8)}: кадр ${index + 1} ${id.ok ? '' : 'без лица целиком, '}сходство ${similarity.toFixed(2)}, попытка ${attempt + 2}`,
+      )
     }
-    return first
+    return best.buf
   }
 
-  /** Клип, где лицо видно хотя бы в 80% кадров: до трёх попыток, иначе лучший. */
-  async function clipWithFace(job, imageBuf, tag, clip, width, height, file, minFaces = 1) {
-    let best = { ratio: -1, path: '' }
+  /** Клип, где лицо видно и остаётся тем же человеком хотя бы в 80% кадров: до трёх попыток. */
+  async function clipWithFace(job, imageBuf, tag, clip, width, height, file, refs, minFaces = 1) {
+    let best = { score: -1, path: '' }
+    const need = minFaces > 1 ? MIN_PAIR_RATIO : MIN_FACE_RATIO
     for (let attempt = 0; attempt < 3; attempt++) {
       checkCancel(job.id)
       const path = `${file}.try${attempt}.mp4`
@@ -150,28 +185,29 @@ export function startWorker({ q, config, log, onFinish = () => {} }) {
         height,
         path,
       )
-      const ratio = await faceRatio(path, minFaces)
-      if (ratio > best.ratio) {
+      const r = await clipIdentity(path, refs, minFaces)
+      const score = r.ratio + r.sameRatio
+      if (score > best.score) {
         if (best.path) rmSync(best.path, { force: true })
-        best = { ratio, path }
+        best = { score, path }
       } else {
         rmSync(path, { force: true })
       }
-      if (ratio >= (minFaces > 1 ? MIN_PAIR_RATIO : MIN_FACE_RATIO)) break
+      if (r.ratio >= need && r.sameRatio >= MIN_SAME_RATIO) break
       log(
-        `задача ${job.id.slice(0, 8)}: клип ${tag} лицо в ${Math.round(ratio * 100)}% кадров, пересъёмка`,
+        `задача ${job.id.slice(0, 8)}: клип ${tag} лицо в ${Math.round(r.ratio * 100)}% кадров, тот же человек в ${Math.round(r.sameRatio * 100)}%, пересъёмка`,
       )
     }
     renameSync(best.path, file)
   }
 
   async function photoJob(job, plan, out) {
-    const images = await uploadPhotos(job)
+    const ref = await prepareRefs(job)
     const results = []
     for (const [i, shot] of plan.entries()) {
       checkCancel(job.id)
       const png = join(out, `${i + 1}.png`)
-      writeFileSync(png, await editWithFace(job, images, shot, i, 'RealESRGAN_x2plus.pth'))
+      writeFileSync(png, await editWithFace(job, ref, shot, i, 'RealESRGAN_x2plus.pth'))
       await toJpeg(png, join(out, `${i + 1}.jpg`))
       await toWebp(png, join(out, `${i + 1}.webp`), 720)
       rmSync(png)
@@ -190,7 +226,7 @@ export function startWorker({ q, config, log, onFinish = () => {} }) {
   }
 
   const videoNegative =
-    'blurry, distorted face, changing face, hands covering the face, extra limbs, extra fingers, static, jitter, flicker, watermark, text, morphing'
+    'blurry, distorted face, changing face, face morphing, different person, changing identity, hands covering the face, extra limbs, extra fingers, static, jitter, flicker, watermark, text, morphing'
   async function ffmpeg(args) {
     await run('ffmpeg', ['-y', '-loglevel', 'error', ...args], { timeout: 300_000 })
   }
@@ -233,13 +269,13 @@ export function startWorker({ q, config, log, onFinish = () => {} }) {
 
   /** Видеошаблон: четыре плана (кадр → клип), склейка с переходами и музыкой ≈ 19 с. */
   async function videoJob(job, plan, out) {
-    const images = await uploadPhotos(job)
+    const ref = await prepareRefs(job, plan.people)
     const clips = []
     let step = 0
     for (const [i, shot] of plan.shots.entries()) {
       checkCancel(job.id)
       const still = join(out, `still-${i}.png`)
-      writeFileSync(still, await editWithFace(job, images, shot.still, i, undefined, plan.people))
+      writeFileSync(still, await editWithFace(job, ref, shot.still, i, undefined, plan.people))
       if (i === 0) await toWebp(still, join(out, 'poster.webp'), 720)
       q.progress.run(++step, '[]', job.id)
       checkCancel(job.id)
@@ -252,6 +288,7 @@ export function startWorker({ q, config, log, onFinish = () => {} }) {
         shot.video.width,
         shot.video.height,
         clip,
+        ref.refs,
         plan.people,
       )
       rmSync(still)
@@ -276,11 +313,13 @@ export function startWorker({ q, config, log, onFinish = () => {} }) {
     const parts = []
     let image = readFileSync(source)
     // Если на исходном фото есть лицо, оно должно остаться в кадре и в ролике.
-    const withFace = await faceOk(image)
+    const refs = [image]
+    const withFace = (await identity(image, [])).ok
     for (const [i, clip] of plan.clips.entries()) {
       checkCancel(job.id)
       const file = join(out, `part-${i}.mp4`)
-      if (withFace) await clipWithFace(job, image, `a${i}`, clip, plan.width, plan.height, file)
+      if (withFace)
+        await clipWithFace(job, image, `a${i}`, clip, plan.width, plan.height, file, refs)
       else await wanClip(job, image, `a${i}`, clip, plan.width, plan.height, file)
       parts.push(file)
       if (i < plan.clips.length - 1) {

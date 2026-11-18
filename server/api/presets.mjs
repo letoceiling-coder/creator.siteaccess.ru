@@ -92,7 +92,7 @@ export function videoPlan(target, options) {
         width: sz.video[0],
         height: sz.video[1],
         seed: 82_000 + i * 17,
-        prompt: `${beat.motion}, cinematic, natural realistic motion, ${pair ? 'both faces stay' : 'the face stays'} visible, consistent and inside the frame`,
+        prompt: `${beat.motion}, cinematic, natural realistic motion, ${pair ? 'both faces stay' : 'the face stays'} visible, consistent and inside the frame, ${pair ? 'both people keep' : 'the person keeps'} exactly the same face and identity throughout the whole clip, no face morphing`,
       },
     })),
   }

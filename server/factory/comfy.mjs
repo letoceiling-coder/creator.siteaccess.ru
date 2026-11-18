@@ -58,21 +58,67 @@ export function qwenImageWorkflow({ prompt, negative = '', width, height, seed, 
   }
 }
 
-export async function runWorkflow(workflow, { timeoutMs = 900_000, front = false } = {}) {
+const OLLAMA = process.env.OLLAMA_URL ?? 'http://127.0.0.1:11434'
+
+/**
+ * ComfyUI делит видеокарту с Ollama (языковые модели других сервисов сервера). Модель Ollama
+ * занимает до 21 ГБ из 24 — генерация падает по памяти. Перед задачей выгружаем модели Ollama
+ * из GPU: при следующем запросе Ollama загрузит их снова.
+ */
+export async function releaseOllama() {
+  try {
+    const ps = await (await fetch(`${OLLAMA}/api/ps`, { signal: AbortSignal.timeout(3000) })).json()
+    const loaded = (ps.models ?? []).filter((m) => (m.size_vram ?? 0) > 512 * 1024 * 1024)
+    for (const m of loaded)
+      await fetch(`${OLLAMA}/api/generate`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ model: m.name, keep_alive: 0 }),
+        signal: AbortSignal.timeout(30_000),
+      })
+    if (loaded.length) await sleep(1500)
+    return loaded.map((m) => m.name)
+  } catch {
+    return []
+  }
+}
+
+/** Понятная ошибка ComfyUI вместо трассировки на десятки строк. */
+function describe(message) {
+  const [kind, data] = Array.isArray(message) ? message : []
+  if (kind !== 'execution_error' || !data) return 'Ошибка генерации'
+  if (
+    /OutOfMemory/i.test(data.exception_type ?? '') ||
+    /out of memory/i.test(data.exception_message ?? '')
+  )
+    return 'Не хватило видеопамяти GPU'
+  const first = String(data.exception_message ?? '')
+    .split('\n')[0]
+    .slice(0, 200)
+  return `Ошибка генерации (${data.node_type ?? 'узел'}): ${first}`
+}
+
+class GpuMemoryError extends Error {}
+
+async function runOnce(workflow, { timeoutMs, front }) {
+  await releaseOllama()
   const res = await fetch(`${COMFY}/prompt`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ prompt: workflow, client_id: 'creator-factory', front }),
   })
-  if (!res.ok) throw new Error(`ComfyUI отклонил задачу: ${res.status} ${await res.text()}`)
+  if (!res.ok)
+    throw new Error(`ComfyUI отклонил задачу: ${res.status} ${(await res.text()).slice(0, 300)}`)
   const { prompt_id: id } = await res.json()
   const started = Date.now()
   while (Date.now() - started < timeoutMs) {
     await sleep(1500)
     const h = await (await fetch(`${COMFY}/history/${id}`)).json()
     const entry = h[id]
-    if (entry?.status?.status_str === 'error')
-      throw new Error(`Ошибка генерации: ${JSON.stringify(entry.status.messages?.at(-1))}`)
+    if (entry?.status?.status_str === 'error') {
+      const text = describe(entry.status.messages?.find((m) => m[0] === 'execution_error'))
+      throw text === 'Не хватило видеопамяти GPU' ? new GpuMemoryError(text) : new Error(text)
+    }
     if (entry?.outputs) {
       const files = Object.values(entry.outputs).flatMap((o) => [
         ...(o.images ?? []),
@@ -83,6 +129,22 @@ export async function runWorkflow(workflow, { timeoutMs = 900_000, front = false
     }
   }
   throw new Error('Время ожидания генерации истекло')
+}
+
+export async function runWorkflow(workflow, { timeoutMs = 900_000, front = false } = {}) {
+  try {
+    return await runOnce(workflow, { timeoutMs, front })
+  } catch (error) {
+    // Память заняли между проверкой и запуском — освобождаем ещё раз и повторяем.
+    if (!(error instanceof GpuMemoryError)) throw error
+    await fetch(`${COMFY}/free`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ unload_models: true, free_memory: true }),
+    }).catch(() => {})
+    await sleep(5000)
+    return runOnce(workflow, { timeoutMs, front })
+  }
 }
 
 export async function download(file) {
@@ -315,7 +377,9 @@ export function qwenEditWorkflow({
   width,
   height,
   upscale,
+  fast = true,
 }) {
+  // fast — Lightning 4 шага (быстро); без него 20 шагов с CFG: лицо точнее, но в ~4 раза дольше.
   const load = {}
   const encode = { clip: ['2', 0], prompt, vae: ['3', 0] }
   const negEncode = { clip: ['2', 0], prompt: negative, vae: ['3', 0] }
@@ -355,7 +419,10 @@ export function qwenEditWorkflow({
         strength_model: 1,
       },
     },
-    5: { class_type: 'ModelSamplingAuraFlow', inputs: { model: ['4', 0], shift: 3 } },
+    5: {
+      class_type: 'ModelSamplingAuraFlow',
+      inputs: { model: fast ? ['4', 0] : ['1', 0], shift: 3 },
+    },
     6: { class_type: 'CFGNorm', inputs: { model: ['5', 0], strength: 1 } },
     ...load,
     7: { class_type: 'TextEncodeQwenImageEditPlus', inputs: encode },
@@ -372,8 +439,8 @@ export function qwenEditWorkflow({
         negative: ['8', 0],
         latent_image: ['9', 0],
         seed,
-        steps: 4,
-        cfg: 1,
+        steps: fast ? 4 : 20,
+        cfg: fast ? 1 : 4,
         sampler_name: 'euler',
         scheduler: 'simple',
         denoise: 1,
