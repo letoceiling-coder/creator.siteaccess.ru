@@ -37,5 +37,8 @@ const photoJson = `${JSON.stringify(
   null,
   2,
 )}\n`
-writeFileSync(new URL('../../src/features/catalog/photo-templates.json', import.meta.url), photoJson)
+writeFileSync(
+  new URL('../../src/features/catalog/photo-templates.json', import.meta.url),
+  photoJson,
+)
 console.log(`фото-сюжетов: ${photoStories.length}`)

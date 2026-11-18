@@ -44,8 +44,8 @@ const cast = [
   'a young woman with platinum blonde long hair',
 ]
 
-/** Порядок образцов: портрет (обложка), общий план, сверху, момент. */
-const order = [3, 0, 2, 4]
+/** Дополнительные кадры после обложки: общий план, сверху с предметом, портрет. */
+const order = [0, 2, 3]
 const style = `${camera}. Photorealistic, natural skin texture, realistic hands.`
 
 function save() {
@@ -125,14 +125,17 @@ function store(story, index, buf, label) {
   }
 }
 
+/**
+ * Обложка показывает сюжет целиком: средне-общий план, место видно, в руках реквизит,
+ * человек занят действием сюжета — чтобы карточки каталога не были одинаковыми портретами.
+ */
 async function makeCover(story, n) {
-  const shots = directShots(story.id, story.props)
-  const shot = shots[order[0]]
+  const [prop, , move, mood] = story.props
   const who = cast[n % cast.length]
   const buf = await withFace(async (attempt) => {
     const files = await runWorkflow(
       qwenImageWorkflow({
-        prompt: `${shot.camera}. Subject: ${who}, ${shot.pose}. Location: ${story.scene}. Light: ${lighting.day}. Palette: ${story.palette}. ${faceVisible} ${style}`,
+        prompt: `Editorial medium-full shot, 35mm lens, the location is clearly visible around the person. Subject: ${who} with ${prop}, ${move}, expression ${mood}. Location: ${story.scene}. Light: ${lighting.day}. Palette: ${story.palette}. ${faceVisible} ${style}`,
         negative,
         width: 1104,
         height: 1472,
@@ -142,7 +145,7 @@ async function makeCover(story, n) {
     )
     return download(files[0])
   }, `${story.id} обложка`)
-  const cover = store(story, 0, buf, shot.name)
+  const cover = store(story, 0, buf, 'Сюжет')
   state.done[story.id] = { cover: cover.src, thumb: cover.thumb, shots: [cover], who }
   save()
 }
@@ -155,7 +158,7 @@ async function makeMore(story, n) {
   execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', `${dir}/${story.id}-0.webp`, tmp])
   const ref = await uploadImage(readFileSync(tmp), `creator-ps-${story.id}.png`)
   rmSync(tmp)
-  for (const [k, idx] of order.slice(1).entries()) {
+  for (const [k, idx] of order.entries()) {
     const shot = shots[idx]
     const buf = await withFace(
       async (attempt) => {
