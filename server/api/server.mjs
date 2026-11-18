@@ -21,6 +21,7 @@ import { openAccounts } from './accounts.mjs'
 import { openDb } from './db.mjs'
 import { checkOrigin, cookies, HttpError, send, SESSION_COOKIE } from './http.mjs'
 import { botsModule } from './bots.mjs'
+import { channelsModule } from './channels.mjs'
 import { paymentsModule } from './payments.mjs'
 import { adminRoutes } from './routes-admin.mjs'
 import { authRoutes } from './routes-auth.mjs'
@@ -80,10 +81,11 @@ function ipOf(req) {
 }
 
 const payments = paymentsModule({ db, accounts, config, log })
-const bots = botsModule({ db, accounts, config, log })
+const channels = channelsModule({ db, accounts, config, log })
+const bots = botsModule({ db, accounts, config, log, channels })
 if (env.WORKER !== 'off') bots.startTelegram()
 const handleAuth = authRoutes({ accounts, config, log, ipOf, payments, bots })
-const handleAdmin = adminRoutes({ accounts, db, q, log, payments, bots })
+const handleAdmin = adminRoutes({ accounts, db, q, log, payments, bots, channels })
 
 function positionOf(job) {
   if (job.status !== 'queued') return 0

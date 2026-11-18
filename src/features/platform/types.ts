@@ -22,11 +22,20 @@ export interface TelegramHost {
   BackButton?: HostBackButton
   platform?: string
   initData?: string
+  openTelegramLink?: (url: string) => void
 }
 
 export interface MaxHost {
   ready: () => void
   close: () => void
+  shareMaxContent?: (params: {
+    text?: string
+    link?: string
+  }) => Promise<{ status: 'shared' | 'cancelled' }>
+  shareContent?: (params: {
+    text?: string
+    link?: string
+  }) => Promise<{ status: 'shared' | 'cancelled' }>
   deviceName?: string
   downloadFile?: (url: string, fileName: string) => Promise<unknown>
   getViewportSize?: () => Promise<{ height: string; width: string }>
@@ -66,4 +75,9 @@ export interface PlatformAdapter {
   bindBack: (handler: () => void) => () => void
   /** Подписанные данные запуска мини-приложения — для входа без пароля. */
   getInitData: () => string | undefined
+  /**
+   * Поделиться ссылкой средствами мессенджера (выбор чата или контакта).
+   * false — у хоста такого способа нет, нужен запасной путь браузера.
+   */
+  share: (text: string, url: string) => Promise<boolean>
 }

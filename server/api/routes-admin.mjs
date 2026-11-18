@@ -12,7 +12,7 @@ const int = (v, min, max, name) => {
   return n
 }
 
-export function adminRoutes({ accounts, db, q, log, payments, bots }) {
+export function adminRoutes({ accounts, db, q, log, payments, bots, channels }) {
   const st = {
     stats: db.prepare(`SELECT
       (SELECT COUNT(*) FROM users) AS users,
@@ -86,6 +86,7 @@ export function adminRoutes({ accounts, db, q, log, payments, bots }) {
     if (!path.startsWith('/api/admin/')) return undefined
     if (!user) throw new HttpError(401, 'Войдите в аккаунт')
     if (user.role !== 'admin') throw new HttpError(403, 'Нужны права администратора')
+    if (channels?.owns(path)) return channels.handle(req, res, path, user)
     const method = req.method
     const day = Date.now() - 86_400_000
 

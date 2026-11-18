@@ -23,7 +23,7 @@ const same = (a, b) => {
   return x.length === y.length && x.length > 0 && timingSafeEqual(x, y)
 }
 
-export function botsModule({ db, accounts, config, log }) {
+export function botsModule({ db, accounts, config, log, channels }) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS login_links (
       code TEXT PRIMARY KEY,
@@ -255,7 +255,14 @@ export function botsModule({ db, accounts, config, log }) {
   async function maxSetup() {
     await max('POST', '/subscriptions', {
       url: maxHook(),
-      update_types: ['bot_started', 'message_created', 'message_callback'],
+      // bot_added / bot_removed — так студия узнаёт ID каналов, куда добавили бота.
+      update_types: [
+        'bot_started',
+        'message_created',
+        'message_callback',
+        'bot_added',
+        'bot_removed',
+      ],
       secret: webhookSecret(integrations().max.botToken),
     })
     markWebhook('max')
@@ -275,6 +282,8 @@ export function botsModule({ db, accounts, config, log }) {
   }
 
   async function maxUpdate(update) {
+    if (update.update_type === 'bot_added' || update.update_type === 'bot_removed')
+      return channels?.onMaxUpdate(update)
     if (update.update_type === 'bot_started') {
       const payload = update.payload ?? ''
       if (payload.startsWith('login_'))

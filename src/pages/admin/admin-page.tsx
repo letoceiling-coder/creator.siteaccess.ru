@@ -1160,9 +1160,523 @@ function Jobs() {
   )
 }
 
+/* ── публикации в каналы ── */
+
+interface Channel {
+  id: string
+  platform: 'telegram' | 'max'
+  chatId: string
+  title: string
+  username?: string
+  canPost: boolean
+}
+interface ChannelLimits {
+  telegram: { text: number; caption: number; media: number; photo: number; video: number }
+  max: { text: number; media: number; photo: number; video: number }
+  post: { media: number; body: number }
+}
+interface PostResult {
+  channel: string
+  title: string
+  platform: string
+  ok: boolean
+  url?: string
+  error?: string
+}
+interface Post {
+  id: string
+  text: string
+  media: { kind: 'photo' | 'video'; name: string; size: number }[]
+  button?: { text: string; url: string }
+  results: PostResult[]
+  status: 'sending' | 'sent' | 'partial' | 'failed'
+  createdAt: number
+}
+
+const MB = 1024 * 1024
+const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+const VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/webm', 'video/x-matroska']
+const platformName = { telegram: 'Telegram', max: 'MAX' } as const
+
+function ChannelsList({
+  channels,
+  onChange,
+}: {
+  channels: Channel[]
+  onChange: (c: Channel[]) => void
+}) {
+  const [platform, setPlatform] = useState<'telegram' | 'max'>('telegram')
+  const [ref, setRef] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState<{ error?: string; ok?: string }>({})
+
+  async function add() {
+    setBusy(true)
+    setMessage({})
+    try {
+      const { channel } = await api<{ channel: Channel }>(
+        '/api/admin/channels',
+        jsonInit('POST', { platform, ref }),
+      )
+      onChange([...channels.filter((c) => c.id !== channel.id), channel])
+      setRef('')
+      setMessage({
+        ok: channel.canPost
+          ? `Канал «${channel.title}» добавлен`
+          : `Канал «${channel.title}» найден, но у бота нет права публиковать`,
+      })
+    } catch (e) {
+      setMessage({ error: e instanceof Error ? e.message : 'Ошибка' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function remove(c: Channel) {
+    if (!window.confirm(`Убрать «${c.title}» из списка? Сам канал не изменится.`)) return
+    const res = await api<{ channels: Channel[] }>(`/api/admin/channels/${c.id}`, {
+      method: 'DELETE',
+    })
+    onChange(res.channels)
+  }
+
+  return (
+    <div className="bg-canvas-sunken grid gap-3 p-4">
+      <span className="text-ink font-medium">Каналы</span>
+      {channels.length === 0 ? (
+        <p className="text-caption text-ink-muted">Каналов пока нет — добавьте ниже.</p>
+      ) : (
+        <ul className="divide-line grid divide-y">
+          {channels.map((c) => (
+            <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+              <span className="grid min-w-0">
+                <span className="text-ink truncate">
+                  {platformName[c.platform]} · {c.title}
+                </span>
+                <span className={cn('text-caption', c.canPost ? 'text-ink-muted' : 'text-danger')}>
+                  {c.username ? `@${c.username.replace(/^https?:\/\/max\.ru\//, '')} · ` : ''}
+                  ID {c.chatId}
+                  {c.canPost ? '' : ' · бот не может публиковать'}
+                </span>
+              </span>
+              <StudioButton variant="quiet" onClick={() => void remove(c)}>
+                Убрать
+              </StudioButton>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="grid gap-2 sm:grid-cols-[auto_1fr_auto] sm:items-end">
+        <label className="grid gap-1">
+          <span className="text-caption text-ink-muted">Платформа</span>
+          <select
+            className="border-line bg-canvas text-ink min-h-11 border px-3"
+            value={platform}
+            onChange={(e) => setPlatform(e.target.value as 'telegram' | 'max')}
+          >
+            <option value="telegram">Telegram</option>
+            <option value="max">MAX</option>
+          </select>
+        </label>
+        <TextField
+          id="channel-ref"
+          label={platform === 'telegram' ? '@имя или ссылка t.me' : 'ID канала MAX (число)'}
+          value={ref}
+          onChange={(e) => setRef(e.target.value)}
+          placeholder={platform === 'telegram' ? '@neeklo_ai' : '-72000000000000'}
+        />
+        <StudioButton variant="outline" disabled={busy || !ref.trim()} onClick={() => void add()}>
+          {busy ? 'Проверяем…' : 'Добавить'}
+        </StudioButton>
+      </div>
+      <p className="text-caption text-ink-muted">
+        Бот должен быть администратором канала с правом публикации. Каналы MAX добавляются сами,
+        когда бота назначают администратором: если канал не появился — уберите бота из
+        администраторов и добавьте снова (нужна кнопка «Настроить бота» на вкладке «Интеграции»). ID
+        канала MAX можно ввести и вручную.
+      </p>
+      <Notice {...message} />
+    </div>
+  )
+}
+
+interface Draft {
+  file: File
+  kind: 'photo' | 'video'
+  url: string
+}
+
+function Composer({
+  channels,
+  limits,
+  onSent,
+}: {
+  channels: Channel[]
+  limits: ChannelLimits
+  onSent: () => void
+}) {
+  const ready = channels.filter((c) => c.canPost)
+  const [selected, setSelected] = useState<string[]>(() => ready.map((c) => c.id))
+  const [text, setText] = useState('')
+  const [files, setFiles] = useState<Draft[]>([])
+  const [buttonText, setButtonText] = useState('')
+  const [buttonUrl, setButtonUrl] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<{ error?: string; results?: PostResult[] }>({})
+
+  useEffect(() => () => files.forEach((f) => URL.revokeObjectURL(f.url)), [files])
+
+  const targets = ready.filter((c) => selected.includes(c.id))
+  const platforms = [...new Set(targets.map((c) => c.platform))]
+
+  function pick(list: FileList | null) {
+    if (!list) return
+    const added: Draft[] = []
+    const bad: string[] = []
+    for (const file of list) {
+      const kind = PHOTO_TYPES.includes(file.type)
+        ? 'photo'
+        : VIDEO_TYPES.includes(file.type)
+          ? 'video'
+          : undefined
+      if (!kind) bad.push(file.name)
+      else added.push({ file, kind, url: URL.createObjectURL(file) })
+    }
+    setFiles((prev) => [...prev, ...added])
+    setResult(
+      bad.length
+        ? {
+            error: `Не подходят: ${bad.join(', ')}. Фото JPEG, PNG, WebP; видео MP4, MOV, WebM, MKV.`,
+          }
+        : {},
+    )
+  }
+
+  function removeFile(i: number) {
+    setFiles((prev) => {
+      URL.revokeObjectURL(prev[i]!.url)
+      return prev.filter((_f, j) => j !== i)
+    })
+  }
+
+  function move(i: number, d: -1 | 1) {
+    setFiles((prev) => {
+      const next = [...prev]
+      const j = i + d
+      if (j < 0 || j >= next.length) return prev
+      ;[next[i], next[j]] = [next[j]!, next[i]!]
+      return next
+    })
+  }
+
+  // Те же проверки, что на сервере: ограничения каждой выбранной платформы.
+  const problems: string[] = []
+  const notes: string[] = []
+  if (!text.trim() && files.length === 0) problems.push('Добавьте текст или файлы')
+  if (files.length > limits.post.media)
+    problems.push(`Не больше ${limits.post.media} фото и видео в посте`)
+  const total = files.reduce((s, f) => s + f.file.size, 0)
+  if (total > limits.post.body) problems.push('Файлы вместе больше 260 МБ')
+  for (const p of platforms) {
+    const l = limits[p]
+    if (text.length > l.text) problems.push(`${platformName[p]}: текст длиннее ${l.text} символов`)
+    for (const f of files) {
+      const cap = f.kind === 'video' ? l.video : l.photo
+      if (f.file.size > cap)
+        problems.push(`${platformName[p]}: «${f.file.name}» больше ${Math.round(cap / MB)} МБ`)
+    }
+  }
+  if (platforms.includes('telegram') && files.length > 0 && text.length > limits.telegram.caption)
+    notes.push(
+      `Telegram: подпись к медиа — до ${limits.telegram.caption} символов, поэтому текст уйдёт отдельным сообщением после медиа.`,
+    )
+  if (platforms.includes('telegram') && files.length > 1 && buttonText)
+    notes.push('Telegram: к альбому кнопку прикрепить нельзя — она уйдёт отдельным сообщением.')
+  if (buttonText && !/^https:\/\/\S+$/.test(buttonUrl))
+    problems.push('Ссылка кнопки должна начинаться с https://')
+  if (targets.length === 0) problems.push('Выберите канал')
+
+  async function submit() {
+    if (
+      !window.confirm(
+        `Опубликовать в ${targets.map((c) => `«${c.title}»`).join(', ')}? Пост увидят подписчики.`,
+      )
+    )
+      return
+    setBusy(true)
+    setResult({})
+    const body = new FormData()
+    body.append('text', text)
+    for (const id of selected) body.append('channels', id)
+    for (const f of files) body.append('files', f.file, f.file.name)
+    if (buttonText) {
+      body.append('buttonText', buttonText)
+      body.append('buttonUrl', buttonUrl)
+    }
+    try {
+      const res = await api<{ status: string; results: PostResult[] }>('/api/admin/posts', {
+        method: 'POST',
+        body,
+      })
+      setResult({ results: res.results })
+      if (res.status === 'sent') {
+        setText('')
+        setFiles([])
+        setButtonText('')
+        setButtonUrl('')
+      }
+      onSent()
+    } catch (e) {
+      setResult({ error: e instanceof Error ? e.message : 'Ошибка' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const textLimit = Math.min(...platforms.map((p) => limits[p].text), 4096)
+
+  return (
+    <div className="grid gap-4">
+      <fieldset className="grid gap-1">
+        <legend className="text-caption text-ink-muted mb-1">Куда</legend>
+        {ready.length === 0 ? (
+          <p className="text-caption text-ink-muted">Нет каналов, где бот может публиковать.</p>
+        ) : (
+          ready.map((c) => (
+            <Checkbox
+              key={c.id}
+              label={`${platformName[c.platform]} · ${c.title}`}
+              checked={selected.includes(c.id)}
+              onChange={(e) =>
+                setSelected((s) =>
+                  e.target.checked ? [...s, c.id] : s.filter((id) => id !== c.id),
+                )
+              }
+            />
+          ))
+        )}
+      </fieldset>
+
+      <label className="grid gap-1">
+        <span className="flex justify-between gap-2">
+          <span className="text-caption text-ink-muted">Текст</span>
+          <span
+            className={cn(
+              'text-caption tabular-nums',
+              text.length > textLimit ? 'text-danger' : 'text-ink-muted',
+            )}
+          >
+            {text.length} / {textLimit}
+          </span>
+        </span>
+        <textarea
+          className="border-line bg-canvas text-ink min-h-40 border p-3"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="Текст поста"
+        />
+        <span className="text-caption text-ink-muted">
+          Разметка: **жирный**, _курсив_, [текст ссылки](https://адрес).
+        </span>
+      </label>
+
+      <div className="grid gap-2">
+        <span className="text-caption text-ink-muted">
+          Фото и видео · {files.length} / {limits.post.media} · несколько файлов уйдут галереей
+        </span>
+        {files.length > 0 ? (
+          <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {files.map((f, i) => (
+              <li key={f.url} className="bg-canvas-sunken grid gap-1 p-1">
+                {f.kind === 'video' ? (
+                  <video src={f.url} muted className="aspect-square w-full object-cover" />
+                ) : (
+                  <img src={f.url} alt="" className="aspect-square w-full object-cover" />
+                )}
+                <span className="text-caption text-ink-muted truncate px-1">
+                  {f.kind === 'video' ? 'Видео' : 'Фото'} · {(f.file.size / MB).toFixed(1)} МБ
+                </span>
+                <span className="flex">
+                  <button
+                    type="button"
+                    className="text-ink min-h-11 flex-1"
+                    aria-label="Раньше"
+                    disabled={i === 0}
+                    onClick={() => move(i, -1)}
+                  >
+                    ←
+                  </button>
+                  <button
+                    type="button"
+                    className="text-danger min-h-11 flex-1"
+                    aria-label={`Убрать ${f.file.name}`}
+                    onClick={() => removeFile(i)}
+                  >
+                    ✕
+                  </button>
+                  <button
+                    type="button"
+                    className="text-ink min-h-11 flex-1"
+                    aria-label="Позже"
+                    disabled={i === files.length - 1}
+                    onClick={() => move(i, 1)}
+                  >
+                    →
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        <label className="border-line text-ink grid min-h-11 cursor-pointer place-items-center border border-dashed px-3 py-2">
+          Добавить фото или видео
+          <input
+            type="file"
+            multiple
+            accept={[...PHOTO_TYPES, ...VIDEO_TYPES].join(',')}
+            className="sr-only"
+            onChange={(e) => {
+              pick(e.target.files)
+              e.target.value = ''
+            }}
+          />
+        </label>
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-2">
+        <TextField
+          id="post-button-text"
+          label="Кнопка под постом (необязательно)"
+          value={buttonText}
+          maxLength={64}
+          onChange={(e) => setButtonText(e.target.value)}
+          placeholder="Открыть студию"
+        />
+        <TextField
+          id="post-button-url"
+          label="Ссылка кнопки"
+          value={buttonUrl}
+          onChange={(e) => setButtonUrl(e.target.value)}
+          placeholder="https://creator.siteaccess.ru"
+        />
+      </div>
+
+      <details className="text-caption text-ink-muted">
+        <summary className="cursor-pointer">Ограничения платформ</summary>
+        <ul className="mt-2 grid list-disc gap-1 pl-5">
+          <li>
+            Telegram: текст до {limits.telegram.text} символов, подпись к медиа до{' '}
+            {limits.telegram.caption}; галерея 2–{limits.telegram.media} фото и видео; фото до{' '}
+            {limits.telegram.photo / MB} МБ, видео до {limits.telegram.video / MB} МБ; не больше ~20
+            постов в минуту.
+          </li>
+          <li>
+            MAX: текст до {limits.max.text} символов; до {limits.max.media} вложений; фото до{' '}
+            {limits.max.photo / MB} МБ и 7680×7680, видео до {limits.max.video / MB} МБ; не больше 2
+            сообщений в секунду.
+          </li>
+        </ul>
+      </details>
+
+      {notes.map((n) => (
+        <p key={n} className="text-caption text-ink-muted">
+          {n}
+        </p>
+      ))}
+      {problems.length && (text || files.length) ? (
+        <ul className="text-caption text-danger grid gap-1">
+          {problems.map((p) => (
+            <li key={p}>{p}</li>
+          ))}
+        </ul>
+      ) : null}
+
+      <StudioButton disabled={busy || problems.length > 0} onClick={() => void submit()}>
+        {busy ? 'Публикуем…' : 'Опубликовать'}
+      </StudioButton>
+      {result.error ? <Notice error={result.error} /> : null}
+      {result.results ? <Results results={result.results} /> : null}
+    </div>
+  )
+}
+
+function Results({ results }: { results: PostResult[] }) {
+  return (
+    <ul className="grid gap-1">
+      {results.map((r) => (
+        <li key={r.channel} className={cn('text-caption', r.ok ? 'text-success' : 'text-danger')}>
+          {r.ok ? '✓' : '!'} {r.title}
+          {r.ok && r.url ? (
+            <>
+              {' · '}
+              <a href={r.url} target="_blank" rel="noreferrer" className="underline">
+                открыть
+              </a>
+            </>
+          ) : null}
+          {r.error ? ` · ${r.error}` : ''}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function Publications() {
+  const { data, setData, error } = useLoad<{ channels: Channel[]; limits: ChannelLimits }>(
+    '/api/admin/channels',
+  )
+  const history = useLoad<{ posts: Post[] }>('/api/admin/posts')
+  if (error) return <Notice error={error} />
+  if (!data) return <IrisLoader size={32} label="Загрузка" />
+  return (
+    <div className="grid gap-8">
+      <Section title="Новый пост">
+        <Composer
+          key={data.channels.map((c) => c.id).join()}
+          channels={data.channels}
+          limits={data.limits}
+          onSent={history.reload}
+        />
+      </Section>
+      <Section title="Каналы">
+        <ChannelsList
+          channels={data.channels}
+          onChange={(channels) => setData({ ...data, channels })}
+        />
+      </Section>
+      <Section title="История">
+        {!history.data ? (
+          <IrisLoader size={24} label="Загрузка" />
+        ) : history.data.posts.length === 0 ? (
+          <p className="text-caption text-ink-muted">Постов пока нет.</p>
+        ) : (
+          <ul className="divide-line border-line grid divide-y border-y">
+            {history.data.posts.map((p) => (
+              <li key={p.id} className="grid gap-1 py-3">
+                <span className="text-caption text-ink-muted">
+                  {dt(p.createdAt)} ·{' '}
+                  {p.media.length
+                    ? `${p.media.filter((m) => m.kind === 'photo').length} фото, ${p.media.filter((m) => m.kind === 'video').length} видео`
+                    : 'текст'}
+                  {p.button ? ` · кнопка «${p.button.text}»` : ''}
+                </span>
+                {p.text ? (
+                  <span className="text-ink line-clamp-3 break-words">{p.text}</span>
+                ) : null}
+                <Results results={p.results} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
+    </div>
+  )
+}
+
 /* ── страница ── */
 
-type Tab = 'overview' | 'users' | 'tariffs' | 'pricing' | 'payments' | 'integrations' | 'jobs'
+type Tab =
+  'overview' | 'users' | 'tariffs' | 'pricing' | 'payments' | 'integrations' | 'posts' | 'jobs'
 const tabs: { id: Tab; label: string }[] = [
   { id: 'overview', label: 'Сводка' },
   { id: 'users', label: 'Пользователи' },
@@ -1170,6 +1684,7 @@ const tabs: { id: Tab; label: string }[] = [
   { id: 'pricing', label: 'Цены и бонусы' },
   { id: 'payments', label: 'Оплата' },
   { id: 'integrations', label: 'Интеграции' },
+  { id: 'posts', label: 'Публикации' },
   { id: 'jobs', label: 'Задачи' },
 ]
 
@@ -1208,6 +1723,7 @@ export function AdminPage() {
       {tab === 'pricing' ? <Pricing /> : null}
       {tab === 'payments' ? <PaymentsPanel /> : null}
       {tab === 'integrations' ? <IntegrationsPanel /> : null}
+      {tab === 'posts' ? <Publications /> : null}
       {tab === 'jobs' ? <Jobs /> : null}
     </div>
   )

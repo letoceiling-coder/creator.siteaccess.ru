@@ -19,6 +19,7 @@ export function createBrowserAdapter(viewportHeight: number | null): PlatformAda
     close: () => undefined,
     bindBack: () => () => undefined,
     getInitData: () => undefined,
+    share: () => Promise.resolve(false),
   }
 }
 
@@ -39,6 +40,13 @@ export function createTelegramAdapter(input: AdapterInput): PlatformAdapter {
     bindBack: (handler) => bindHostBack(host?.BackButton, handler),
     getInitData: () =>
       host?.initData || initDataFromHash('telegram', globalThis.location?.hash ?? ''),
+    // Экран Telegram «Переслать»: выбор контакта, чата или канала.
+    share: (text, url) => {
+      if (!host?.openTelegramLink) return Promise.resolve(false)
+      const params = new URLSearchParams({ url, text })
+      host.openTelegramLink(`https://t.me/share/url?${params.toString()}`)
+      return Promise.resolve(true)
+    },
   }
 }
 
@@ -57,5 +65,16 @@ export function createMaxAdapter(input: AdapterInput): PlatformAdapter {
     },
     bindBack: (handler) => bindHostBack(host?.BackButton, handler),
     getInitData: () => host?.initData || initDataFromHash('max', globalThis.location?.hash ?? ''),
+    // Экран MAX «Поделиться»: выбор контакта или чата внутри MAX; иначе — системное меню.
+    share: async (text, url) => {
+      const fn = host?.shareMaxContent ?? host?.shareContent
+      if (!fn) return false
+      try {
+        await fn.call(host, { text, link: url })
+      } catch {
+        // пользователь закрыл экран
+      }
+      return true
+    },
   }
 }

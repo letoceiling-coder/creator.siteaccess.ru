@@ -24,6 +24,7 @@ import {
 } from '@/features/jobs/api.ts'
 import { priceOf, useSession } from '@/features/auth/session.ts'
 import { motions } from '@/features/jobs/motions.ts'
+import { usePlatform } from '@/features/platform/use-platform.ts'
 import { cn } from '@/shared/cn.ts'
 import { OrderBanner, TopUp } from './payment-section.tsx'
 
@@ -809,6 +810,9 @@ export function CabinetScreen({
   onAdmin: () => void
 }) {
   const session = useSession()
+  const platform = usePlatform()
+  // В мини-приложении вход — аккаунт мессенджера, выходить некуда.
+  const inMiniApp = platform.id !== 'browser'
   const me = session.me
   const [orderId] = useState(() => {
     const id = new URLSearchParams(window.location.search).get('order')
@@ -859,6 +863,7 @@ export function CabinetScreen({
     const text =
       'Фотосессии и видео с собой в главной роли — попробуй, по ссылке будут бонусные токены'
     try {
+      if (await platform.adapter.share(text, me.referralUrl)) return
       if (navigator.share) {
         await navigator.share({ title: 'AI Creative Studio', text, url: me.referralUrl })
         return
@@ -888,9 +893,11 @@ export function CabinetScreen({
               Админка
             </StudioButton>
           ) : null}
-          <StudioButton variant="quiet" onClick={() => void session.logout()}>
-            Выйти
-          </StudioButton>
+          {inMiniApp ? null : (
+            <StudioButton variant="quiet" onClick={() => void session.logout()}>
+              Выйти
+            </StudioButton>
+          )}
         </div>
       </div>
 

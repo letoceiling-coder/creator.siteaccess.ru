@@ -30,15 +30,98 @@ const env = {
 let child
 
 /* ── Поддельные ЮKassa и Т-Банк: настоящие платёжные API в тестах не вызываются ── */
-const fake = { yk: new Map(), tb: new Map(), ykAmountOverride: undefined, max: [] }
+const fake = {
+  yk: new Map(),
+  tb: new Map(),
+  ykAmountOverride: undefined,
+  max: [],
+  tg: [],
+  maxUploads: [],
+  maxNotReady: 0,
+}
 const fakePort = 4400 + Math.floor(Math.random() * 500)
 const fakeServer = createServer(async (req, res) => {
-  let raw = ''
-  for await (const chunk of req) raw += chunk
-  const body = raw ? JSON.parse(raw) : {}
+  const chunks = []
+  for await (const chunk of req) chunks.push(chunk)
+  const raw = Buffer.concat(chunks)
+  const type = req.headers['content-type'] ?? ''
+  let body = {}
+  let parts
+  if (type.startsWith('multipart/form-data')) {
+    parts = await new Request('http://x/', {
+      method: 'POST',
+      headers: { 'content-type': type },
+      body: raw,
+    }).formData()
+    for (const [k, v] of parts) if (typeof v === 'string') body[k] = v
+  } else if (raw.length) body = JSON.parse(raw.toString())
   const reply = (data, status = 200) => {
     res.writeHead(status, { 'content-type': 'application/json' })
     res.end(JSON.stringify(data))
+  }
+  // Telegram Bot API (публикации в канал).
+  const tgm = /^\/tg\/bot([^/]+)\/(\w+)$/.exec(req.url ?? '')
+  if (tgm) {
+    assert.equal(tgm[1], '123456:SECRET-TOKEN-abcd')
+    const method = tgm[2]
+    const files = parts
+      ? [...parts]
+          .filter(([, v]) => typeof v !== 'string')
+          .map(([k, v]) => ({ field: k, size: v.size, type: v.type }))
+      : []
+    fake.tg.push({ method, body, files })
+    if (method === 'getMe') return reply({ ok: true, result: { id: 99, username: 'test_bot' } })
+    if (method === 'getChat')
+      return body.chat_id === '@neeklo_ai' || body.chat_id === '-100500'
+        ? reply({
+            ok: true,
+            result: { id: -100500, type: 'channel', title: 'Studio', username: 'neeklo_ai' },
+          })
+        : reply({ ok: false, description: 'Bad Request: chat not found' })
+    if (method === 'getChatMember')
+      return reply({ ok: true, result: { status: 'administrator', can_post_messages: true } })
+    const id = 100 + fake.tg.length
+    if (method === 'sendMediaGroup')
+      return reply({
+        ok: true,
+        result: JSON.parse(body.media).map((_m, i) => ({ message_id: id + i })),
+      })
+    return reply({ ok: true, result: { message_id: id } })
+  }
+  // Загрузка файлов MAX: адрес загрузки → файл → токен.
+  if (req.url?.startsWith('/max/uploads?type=')) {
+    const kind = new URL(req.url, 'http://x').searchParams.get('type')
+    return reply({
+      url: `http://127.0.0.1:${fakePort}/max-upload/${kind}`,
+      ...(kind === 'video' ? { token: 'vid-token' } : {}),
+    })
+  }
+  if (req.url?.startsWith('/max-upload/')) {
+    assert.equal(req.headers.authorization, 'max-test-token')
+    const file = parts.get('data')
+    fake.maxUploads.push({ url: req.url, size: file.size })
+    return req.url.endsWith('/video')
+      ? reply(1)
+      : reply({ photos: { p1: { token: `img-${fake.maxUploads.length}` } } })
+  }
+  if (req.url === '/max/chats/-7001')
+    return reply({
+      chat_id: -7001,
+      type: 'channel',
+      title: 'Канал MAX',
+      link: 'https://max.ru/se13448473_biz',
+    })
+  if (req.url === '/max/chats/-7001/members/me')
+    return reply({ is_admin: true, permissions: ['write', 'read_all_messages'] })
+  if (req.url?.startsWith('/max/messages?chat_id=') && fake.maxNotReady > 0) {
+    fake.maxNotReady -= 1
+    return reply(
+      {
+        code: 'attachment.not.ready',
+        message: 'Key: errors.process.attachment.file.not.processed',
+      },
+      400,
+    )
   }
   if (req.url === '/yk/payments' && req.method === 'POST') {
     assert.equal(
@@ -96,6 +179,8 @@ const fakeServer = createServer(async (req, res) => {
 env.YOOKASSA_URL = `http://127.0.0.1:${fakePort}/yk`
 env.TBANK_URL = `http://127.0.0.1:${fakePort}/tb`
 env.MAX_API_URL = `http://127.0.0.1:${fakePort}/max`
+env.TELEGRAM_API_URL = `http://127.0.0.1:${fakePort}/tg`
+env.TELEGRAM_PROXY = ''
 
 before(async () => {
   await new Promise((resolve) => fakeServer.listen(fakePort, '127.0.0.1', resolve))
@@ -505,4 +590,178 @@ test('вход на сайте через бота MAX: подтверждени
   assert.equal(me.data.user.name, 'Макс Тест')
   assert.deepEqual(me.data.user.providers, ['max'])
   assert.equal((await browser(`/api/auth/link/${code}`)).data.status, 'used')
+})
+
+test('публикации в каналы: только админ, проверка ограничений, галерея в Telegram и MAX', async () => {
+  const { call } = await newUser()
+  assert.equal((await call('/api/admin/channels')).status, 403)
+  const adm = await admin()
+  // Токены ботов заданы в предыдущих тестах (Telegram и MAX).
+  const tg = await adm('/api/admin/channels', {
+    method: 'POST',
+    json: { platform: 'telegram', ref: 'https://t.me/neeklo_ai' },
+  })
+  assert.equal(tg.status, 201, JSON.stringify(tg.data))
+  assert.deepEqual(tg.data.channel, {
+    id: 'telegram:-100500',
+    platform: 'telegram',
+    chatId: '-100500',
+    title: 'Studio',
+    username: 'neeklo_ai',
+    canPost: true,
+  })
+  assert.equal(
+    (
+      await adm('/api/admin/channels', {
+        method: 'POST',
+        json: { platform: 'telegram', ref: 'nope' },
+      })
+    ).status,
+    400,
+  )
+
+  // Канал MAX приходит событием bot_added на вебхук бота.
+  const secret = createHash('sha256')
+    .update('creator-webhook:max-test-token')
+    .digest('hex')
+    .slice(0, 48)
+  await fetch(`${base}/api/bots/max/webhook`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-max-bot-api-secret': secret },
+    body: JSON.stringify({
+      update_type: 'bot_added',
+      chat_id: -7001,
+      user: { user_id: 1 },
+      is_channel: true,
+    }),
+  })
+  await new Promise((r) => setTimeout(r, 300))
+  const list = await adm('/api/admin/channels')
+  assert.deepEqual(
+    list.data.channels.map((c) => [c.id, c.title, c.canPost]),
+    [
+      ['telegram:-100500', 'Studio', true],
+      ['max:-7001', 'Канал MAX', true],
+    ],
+  )
+  assert.equal(list.data.limits.telegram.caption, 1024)
+
+  const video = Buffer.concat([
+    Buffer.from([0, 0, 0, 0x18]),
+    Buffer.from('ftypmp42'),
+    Buffer.alloc(64),
+  ])
+  const post = (fields, files = []) => {
+    const f = new FormData()
+    for (const [k, v] of Object.entries(fields)) for (const one of [v].flat()) f.append(k, one)
+    for (const [i, file] of files.entries())
+      f.append(
+        'files',
+        new Blob([file.buf], { type: file.type }),
+        `f${i}.${file.type === 'video/mp4' ? 'mp4' : 'jpg'}`,
+      )
+    return adm('/api/admin/posts', { method: 'POST', body: f })
+  }
+  const both = ['telegram:-100500', 'max:-7001']
+
+  // Ограничения: пустой пост, длина текста MAX, лишние файлы, чужие файлы, плохая ссылка кнопки.
+  assert.equal((await post({ channels: both, text: ' ' })).status, 400)
+  const long = await post({ channels: both, text: 'а'.repeat(4001) })
+  assert.equal(long.status, 400)
+  assert.match(long.data.error, /Канал MAX: текст длиннее 4000/)
+  // Тот же текст в Telegram проходит: там предел 4096.
+  assert.equal((await post({ channels: ['telegram:-100500'], text: 'а'.repeat(4001) })).status, 201)
+  const many = Array.from({ length: 11 }, () => ({ buf: photo, type: 'image/jpeg' }))
+  assert.match((await post({ channels: both, text: 'x' }, many)).data.error, /Не больше 10/)
+  assert.equal(
+    (
+      await post({ channels: both, text: 'x' }, [
+        { buf: Buffer.from('<?php ?>'), type: 'image/jpeg' },
+      ])
+    ).status,
+    415,
+  )
+  assert.equal(
+    (
+      await post({
+        channels: both,
+        text: 'x',
+        buttonText: 'Открыть',
+        buttonUrl: 'javascript:alert(1)',
+      })
+    ).status,
+    400,
+  )
+  assert.equal((await post({ channels: [], text: 'x' })).status, 400)
+
+  // Галерея: 2 фото + видео, подпись с разметкой и кнопка-ссылка.
+  fake.tg.length = 0
+  fake.max.length = 0
+  fake.maxNotReady = 1
+  const sent = await post(
+    {
+      channels: both,
+      text: '**Новое** в студии <скоро>: [смотреть](https://creator.siteaccess.ru)',
+      buttonText: 'Открыть студию',
+      buttonUrl: 'https://creator.siteaccess.ru',
+    },
+    [
+      { buf: photo, type: 'image/jpeg' },
+      { buf: photo, type: 'image/jpeg' },
+      { buf: video, type: 'video/mp4' },
+    ],
+  )
+  assert.equal(sent.status, 201, JSON.stringify(sent.data))
+  assert.equal(sent.data.status, 'sent', JSON.stringify(sent.data))
+
+  const group = fake.tg.find((c) => c.method === 'sendMediaGroup')
+  const media = JSON.parse(group.body.media)
+  assert.deepEqual(
+    media.map((m) => m.type),
+    ['photo', 'photo', 'video'],
+  )
+  assert.equal(
+    media[0].caption,
+    '<b>Новое</b> в студии &lt;скоро&gt;: <a href="https://creator.siteaccess.ru">смотреть</a>',
+  )
+  assert.equal(group.files.length, 3)
+  // Кнопку к альбому Telegram не прикрепить — она уходит следующим сообщением.
+  const after = fake.tg.at(-1)
+  assert.equal(after.method, 'sendMessage')
+  assert.equal(
+    JSON.parse(after.body.reply_markup).inline_keyboard[0][0].url,
+    'https://creator.siteaccess.ru',
+  )
+  assert.match(sent.data.results[0].url, /^https:\/\/t\.me\/neeklo_ai\/\d+$/)
+
+  assert.equal(fake.maxUploads.length, 3)
+  const maxMsg = fake.max.at(-1)
+  assert.match(maxMsg.url, /^\/max\/messages\?chat_id=-7001/)
+  assert.equal(maxMsg.body.format, 'markdown')
+  assert.deepEqual(
+    maxMsg.body.attachments.map((a) => a.type),
+    ['image', 'image', 'video', 'inline_keyboard'],
+  )
+  assert.equal(maxMsg.body.attachments[2].payload.token, 'vid-token')
+
+  const history = await adm('/api/admin/posts')
+  assert.equal(history.data.posts[0].status, 'sent')
+  assert.equal(history.data.posts[0].media.length, 3)
+
+  // Длинный текст с одним фото: фото без подписи, текст — отдельным сообщением.
+  fake.tg.length = 0
+  const longText = await post({ channels: ['telegram:-100500'], text: 'б'.repeat(2000) }, [
+    { buf: photo, type: 'image/jpeg' },
+  ])
+  assert.equal(longText.data.status, 'sent')
+  assert.deepEqual(
+    fake.tg.map((c) => c.method),
+    ['sendPhoto', 'sendMessage'],
+  )
+  assert.equal(fake.tg[0].body.caption, undefined)
+
+  assert.equal(
+    (await adm('/api/admin/channels/max:-7001', { method: 'DELETE' })).data.channels.length,
+    1,
+  )
 })
