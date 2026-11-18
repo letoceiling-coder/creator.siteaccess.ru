@@ -227,8 +227,14 @@ export function channelsModule({ db, accounts, config, log }) {
     return data
   }
 
-  async function addMax(chatId) {
-    if (!/^-?\d+$/.test(String(chatId))) throw new HttpError(400, 'ID канала MAX — число')
+  async function addMax(ref) {
+    // Принимаем число или адрес канала из веб-версии: https://web.max.ru/-72…
+    const chatId = /^(?:https?:\/\/web\.max\.ru\/)?(-?\d+)\/?$/.exec(String(ref).trim())?.[1]
+    if (!chatId)
+      throw new HttpError(
+        400,
+        'Нужен числовой ID канала, а не имя бота или канала. Откройте канал в web.max.ru — число в адресе после web.max.ru/ и есть ID. Или назначьте бота администратором канала заново: студия получит ID сама.',
+      )
     const chat = await max('GET', `/chats/${chatId}`)
     // Публиковать может владелец или администратор с правом «write».
     const me = await max('GET', `/chats/${chatId}/members/me`).catch(() => undefined)
