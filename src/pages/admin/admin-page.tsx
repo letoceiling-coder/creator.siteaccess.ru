@@ -400,8 +400,8 @@ function Tariffs() {
   return (
     <Section title="Тарифы">
       <p className="text-body text-ink-muted">
-        Пакеты токенов, которые видят пользователи в кабинете. Онлайн-оплата подключается отдельно,
-        до неё баланс пополняет администратор.
+        Пакеты токенов, которые видят пользователи в кабинете. Оплата — через ЮKassa или Т-Банк
+        (раздел «Оплата»); вручную баланс меняется в разделе «Пользователи».
       </p>
       <Notice error={error} />
       {data ? (
@@ -729,6 +729,244 @@ function IntegrationsPanel() {
   )
 }
 
+/* ── оплата ── */
+
+interface PaymentsSettings {
+  yookassa: { enabled: boolean; shopId: string; secretKey: Secret }
+  tbank: { enabled: boolean; terminalKey: string; password: Secret }
+  receipts: { enabled: boolean; taxation: number; vat: number }
+}
+
+interface Order {
+  id: string
+  title: string
+  tokens: number
+  amount: number
+  provider: string
+  status: string
+  user: string
+  createdAt: number
+  paidAt?: number
+}
+
+const taxations: [number, string][] = [
+  [1, 'ОСН'],
+  [2, 'УСН доходы'],
+  [3, 'УСН доходы минус расходы'],
+  [5, 'ЕСХН'],
+  [6, 'Патент'],
+]
+const vats: [number, string][] = [
+  [1, 'Без НДС'],
+  [2, 'НДС 0%'],
+  [3, 'НДС 10%'],
+  [4, 'НДС 20%'],
+]
+
+function PaymentsPanel() {
+  const { data, error } = useLoad<{ payments: PaymentsSettings }>('/api/admin/payments')
+  const orders = useLoad<{ orders: Order[] }>('/api/admin/orders')
+  const [draft, setDraft] = useState<Record<string, Record<string, string | boolean | number>>>({})
+  const [saved, setSaved] = useState<PaymentsSettings>()
+  const [status, setStatus] = useState<{ error?: string; ok?: string }>({})
+  const origin = window.location.origin
+  const current = saved ?? data?.payments
+
+  if (error) return <Notice error={error} />
+  if (!current) return <IrisLoader size={32} label="Загрузка" />
+
+  const value = <T,>(p: string, k: string, fallback: T): T => (draft[p]?.[k] as T) ?? fallback
+  const set = (p: string, k: string, v: string | boolean | number) =>
+    setDraft((d) => ({ ...d, [p]: { ...d[p], [k]: v } }))
+
+  async function save() {
+    try {
+      const res = await api<{ payments: PaymentsSettings }>(
+        '/api/admin/payments',
+        jsonInit('PUT', draft),
+      )
+      setSaved(res.payments)
+      setDraft({})
+      setStatus({ ok: 'Настройки оплаты сохранены. Ключи хранятся только на сервере.' })
+    } catch (e) {
+      setStatus({ error: e instanceof Error ? e.message : 'Ошибка' })
+    }
+  }
+
+  const secret = (p: string, k: string, label: string, sec: Secret) => (
+    <TextField
+      id={`${p}-${k}`}
+      label={label}
+      type="password"
+      autoComplete="off"
+      placeholder={sec.set ? `Сохранён ${sec.hint} — оставьте пустым, чтобы не менять` : 'Не задан'}
+      value={String(value(p, k, ''))}
+      onChange={(e) => set(p, k, e.target.value)}
+    />
+  )
+
+  const select = (k: 'taxation' | 'vat', label: string, options: [number, string][]) => (
+    <label className="grid gap-2">
+      <span className="text-caption text-ink font-medium">{label}</span>
+      <select
+        className="bg-canvas-sunken text-ink border-line-strong min-h-11 border-b-2 px-3"
+        value={value('receipts', k, current.receipts[k])}
+        onChange={(e) => set('receipts', k, Number(e.target.value))}
+      >
+        {options.map(([v, t]) => (
+          <option key={v} value={v}>
+            {t}
+          </option>
+        ))}
+      </select>
+    </label>
+  )
+
+  return (
+    <Section title="Оплата тарифов">
+      <p className="text-body text-ink-muted">
+        Пользователь выбирает тариф в кабинете и платит на странице ЮKassa или Т-Банка. Токены
+        начисляются один раз и только после подтверждения банком. Цены и пакеты — в разделе
+        «Тарифы».
+      </p>
+
+      <div className="chamfer-sm bg-canvas-raised grid gap-4 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h3 className="font-display text-ink text-xl">ЮKassa</h3>
+          <Checkbox
+            label="Включено"
+            checked={Boolean(value('yookassa', 'enabled', current.yookassa.enabled))}
+            onChange={(e) => set('yookassa', 'enabled', e.target.checked)}
+          />
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <TextField
+            id="yookassa-shopId"
+            label="shopId"
+            value={String(value('yookassa', 'shopId', current.yookassa.shopId))}
+            onChange={(e) => set('yookassa', 'shopId', e.target.value)}
+          />
+          {secret('yookassa', 'secretKey', 'Секретный ключ', current.yookassa.secretKey)}
+        </div>
+        <Help
+          steps={[
+            'В личном кабинете ЮKassa откройте магазин (для проверки — тестовый магазин).',
+            'Интеграция → Ключи API → выпустите секретный ключ. shopId указан там же.',
+            <>
+              Интеграция → HTTP-уведомления → URL для уведомлений:{' '}
+              <CopyLine value={`${origin}/api/payments/yookassa/webhook`} />
+            </>,
+            'Отметьте события payment.succeeded и payment.canceled.',
+            'Вставьте shopId и ключ сюда, включите и сохраните. Тестовый магазин: тестовые карты ЮKassa, деньги не списываются.',
+            'Сервер не доверяет телу уведомления: статус платежа перепроверяется запросом в API ЮKassa.',
+          ]}
+          links={[
+            ['Кабинет ЮKassa', 'https://yookassa.ru/my'],
+            ['Документация API', 'https://yookassa.ru/developers/api'],
+          ]}
+        />
+      </div>
+
+      <div className="chamfer-sm bg-canvas-raised grid gap-4 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h3 className="font-display text-ink text-xl">Т-Банк (Т-Касса)</h3>
+          <Checkbox
+            label="Включено"
+            checked={Boolean(value('tbank', 'enabled', current.tbank.enabled))}
+            onChange={(e) => set('tbank', 'enabled', e.target.checked)}
+          />
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <TextField
+            id="tbank-terminalKey"
+            label="TerminalKey"
+            value={String(value('tbank', 'terminalKey', current.tbank.terminalKey))}
+            onChange={(e) => set('tbank', 'terminalKey', e.target.value)}
+          />
+          {secret('tbank', 'password', 'Пароль терминала', current.tbank.password)}
+        </div>
+        <Help
+          steps={[
+            'В личном кабинете Т-Бизнеса откройте интернет-эквайринг → Магазины → ваш магазин → Терминалы.',
+            'Для проверки возьмите тестовый терминал (TerminalKey оканчивается на DEMO), для приёма денег — рабочий.',
+            'Скопируйте TerminalKey и пароль терминала сюда.',
+            <>
+              Адрес уведомлений передаётся автоматически при создании платежа:{' '}
+              <CopyLine value={`${origin}/api/payments/tbank/webhook`} />. Если в настройках
+              терминала задан свой — укажите этот же.
+            </>,
+            'Подпись каждого уведомления проверяется паролем терминала; поддельные уведомления отклоняются.',
+          ]}
+          links={[
+            ['Документация Т-Кассы', 'https://www.tbank.ru/kassa/dev/payments/'],
+            ['Кабинет Т-Бизнеса', 'https://business.tbank.ru/'],
+          ]}
+        />
+      </div>
+
+      <div className="chamfer-sm bg-canvas-raised grid gap-4 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h3 className="font-display text-ink text-xl">Чеки (54-ФЗ)</h3>
+          <Checkbox
+            label="Передавать данные для чека"
+            checked={Boolean(value('receipts', 'enabled', current.receipts.enabled))}
+            onChange={(e) => set('receipts', 'enabled', e.target.checked)}
+          />
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {select('taxation', 'Система налогообложения', taxations)}
+          {select('vat', 'Ставка НДС', vats)}
+        </div>
+        <p className="text-caption text-ink-muted">
+          Включайте, если в ЮKassa или Т-Кассе подключена онлайн-касса или «Чеки от ЮKassa». Чек
+          уходит на почту пользователя; если почты в профиле нет, кабинет попросит её перед оплатой.
+          Систему налогообложения и ставку уточните у бухгалтера.
+        </p>
+      </div>
+
+      <StudioButton onClick={() => void save()}>Сохранить настройки оплаты</StudioButton>
+      <Notice {...status} />
+
+      <h3 className="font-display text-ink mt-4 text-xl">Платежи</h3>
+      {orders.data ? (
+        <ul className="divide-line border-line grid divide-y border-y">
+          {orders.data.orders.map((o) => (
+            <li key={o.id} className="flex flex-wrap items-center justify-between gap-2 py-3">
+              <span className="grid">
+                <span className="text-ink">
+                  {o.title} · {o.tokens} ток. · {o.amount.toLocaleString('ru-RU')} ₽
+                </span>
+                <span className="text-caption text-ink-muted">
+                  {o.user} · {o.provider === 'tbank' ? 'Т-Банк' : 'ЮKassa'} · {dt(o.createdAt)}
+                </span>
+              </span>
+              <span
+                className={cn(
+                  'text-caption uppercase',
+                  o.status === 'paid'
+                    ? 'text-success'
+                    : o.status === 'pending'
+                      ? 'text-ink-muted'
+                      : 'text-danger',
+                )}
+              >
+                {{ paid: 'оплачен', pending: 'ожидает', canceled: 'отменён', failed: 'ошибка' }[
+                  o.status
+                ] ?? o.status}
+              </span>
+            </li>
+          ))}
+          {orders.data.orders.length === 0 ? (
+            <li className="text-ink-muted py-3">Платежей пока нет.</li>
+          ) : null}
+        </ul>
+      ) : (
+        <IrisLoader size={32} label="Загрузка" />
+      )}
+    </Section>
+  )
+}
+
 /* ── задачи ── */
 
 interface AdminJob {
@@ -785,12 +1023,13 @@ function Jobs() {
 
 /* ── страница ── */
 
-type Tab = 'overview' | 'users' | 'tariffs' | 'pricing' | 'integrations' | 'jobs'
+type Tab = 'overview' | 'users' | 'tariffs' | 'pricing' | 'payments' | 'integrations' | 'jobs'
 const tabs: { id: Tab; label: string }[] = [
   { id: 'overview', label: 'Сводка' },
   { id: 'users', label: 'Пользователи' },
   { id: 'tariffs', label: 'Тарифы' },
   { id: 'pricing', label: 'Цены и бонусы' },
+  { id: 'payments', label: 'Оплата' },
   { id: 'integrations', label: 'Интеграции' },
   { id: 'jobs', label: 'Задачи' },
 ]
@@ -828,6 +1067,7 @@ export function AdminPage() {
       {tab === 'users' ? <Users /> : null}
       {tab === 'tariffs' ? <Tariffs /> : null}
       {tab === 'pricing' ? <Pricing /> : null}
+      {tab === 'payments' ? <PaymentsPanel /> : null}
       {tab === 'integrations' ? <IntegrationsPanel /> : null}
       {tab === 'jobs' ? <Jobs /> : null}
     </div>

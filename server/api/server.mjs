@@ -20,6 +20,7 @@ import { Readable, Transform } from 'node:stream'
 import { openAccounts } from './accounts.mjs'
 import { openDb } from './db.mjs'
 import { checkOrigin, cookies, HttpError, send, SESSION_COOKIE } from './http.mjs'
+import { paymentsModule } from './payments.mjs'
 import { adminRoutes } from './routes-admin.mjs'
 import { authRoutes } from './routes-auth.mjs'
 import { imageHasFace } from '../factory/faces.mjs'
@@ -77,8 +78,9 @@ function ipOf(req) {
   return sha256(`${salt}:${ip}`)
 }
 
-const handleAuth = authRoutes({ accounts, config, log, ipOf })
-const handleAdmin = adminRoutes({ accounts, db, q, log })
+const payments = paymentsModule({ db, accounts, config, log })
+const handleAuth = authRoutes({ accounts, config, log, ipOf, payments })
+const handleAdmin = adminRoutes({ accounts, db, q, log, payments })
 
 function positionOf(job) {
   if (job.status !== 'queued') return 0
@@ -275,6 +277,10 @@ async function handle(req, res) {
 
   if (path.startsWith('/api/admin/')) return handleAdmin(req, res, path, user)
   if ((await handleAuth(req, res, path, url, user)) !== undefined || res.headersSent) return
+  if (path.startsWith('/api/payments')) {
+    await payments.handle(req, res, path, user)
+    if (res.headersSent) return
+  }
 
   if (req.method === 'POST' && path === '/api/jobs') return createJob(req, res, user)
   if (req.method === 'GET' && path === '/api/jobs') {

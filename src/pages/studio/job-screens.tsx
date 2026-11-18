@@ -25,6 +25,7 @@ import {
 import { priceOf, useSession } from '@/features/auth/session.ts'
 import { motions } from '@/features/jobs/motions.ts'
 import { cn } from '@/shared/cn.ts'
+import { OrderBanner, TopUp } from './payment-section.tsx'
 
 /** Что создаём: фотосессию по сценарию или ролик по шаблону. */
 export interface CreateTarget {
@@ -786,14 +787,6 @@ interface WalletRow {
   createdAt: number
 }
 
-interface Tariff {
-  id: string
-  title: string
-  tokens: number
-  price: number
-  badge?: string
-}
-
 const dateTime = (ts: number) =>
   new Date(ts).toLocaleString('ru-RU', {
     day: 'numeric',
@@ -817,17 +810,13 @@ export function CabinetScreen({
 }) {
   const session = useSession()
   const me = session.me
+  const [orderId] = useState(() => {
+    const id = new URLSearchParams(window.location.search).get('order')
+    return id && /^[0-9a-f]{24}$/.test(id) ? id : undefined
+  })
   const [jobs, setJobs] = useState<Job[]>()
   const [history, setHistory] = useState<WalletRow[]>([])
-  const [tariffs, setTariffs] = useState<Tariff[]>([])
   const [copied, setCopied] = useState(false)
-
-  useEffect(() => {
-    fetch('/api/tariffs')
-      .then((r) => r.json() as Promise<{ tariffs: Tariff[] }>)
-      .then((d) => setTariffs(d.tariffs))
-      .catch(() => setTariffs([]))
-  }, [])
 
   useEffect(() => {
     if (session.status !== 'user') return
@@ -883,7 +872,7 @@ export function CabinetScreen({
   }
 
   return (
-    <div className="mx-auto grid max-w-3xl gap-8 px-4 pt-6 pb-16 md:px-6">
+    <div className="mx-auto grid w-full max-w-3xl gap-8 px-4 pt-6 pb-16 md:px-6 [&>*]:min-w-0">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="grid gap-2">
           <Label>Кабинет</Label>
@@ -904,6 +893,8 @@ export function CabinetScreen({
           </StudioButton>
         </div>
       </div>
+
+      {orderId ? <OrderBanner orderId={orderId} /> : null}
 
       <section className="chamfer ticks grain bg-canvas-raised grid gap-4 p-5 md:grid-cols-[1fr_auto] md:items-center">
         <div className="grid gap-1">
@@ -928,8 +919,8 @@ export function CabinetScreen({
           Друг получит {me.bonuses.invitee} токенов при регистрации, а вы — {me.bonuses.referrer},
           когда он создаст первую работу.
         </p>
-        <div className="flex flex-wrap gap-2">
-          <code className="chamfer-sm bg-canvas-sunken text-ink min-h-11 flex-1 truncate px-4 py-3 text-sm">
+        <div className="flex min-w-0 flex-wrap gap-2">
+          <code className="chamfer-sm bg-canvas-sunken text-ink min-h-11 min-w-0 flex-1 basis-48 truncate px-4 py-3 text-sm">
             {me.referralUrl}
           </code>
           <StudioButton variant="outline" onClick={() => void share()}>
@@ -938,34 +929,7 @@ export function CabinetScreen({
         </div>
       </section>
 
-      {tariffs.length ? (
-        <section className="grid gap-3">
-          <Label>Пополнить баланс</Label>
-          <div className="grid gap-3 sm:grid-cols-3">
-            {tariffs.map((t) => (
-              <div key={t.id} className="chamfer-sm bg-canvas-raised grid gap-2 p-4">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-display text-ink text-lg">{t.title}</span>
-                  {t.badge ? (
-                    <span className="text-caption bg-accent-fill text-accent-ink px-2 py-0.5">
-                      {t.badge}
-                    </span>
-                  ) : null}
-                </div>
-                <span className="text-ink text-2xl tabular-nums">{t.tokens} токенов</span>
-                <span className="text-ink-muted">{t.price.toLocaleString('ru-RU')} ₽</span>
-                <StudioButton variant="outline" disabled>
-                  Оплата скоро
-                </StudioButton>
-              </div>
-            ))}
-          </div>
-          <p className="text-caption text-ink-muted">
-            Онлайн-оплата подключается. Пока баланс пополняется по приглашениям, ежедневным бонусам
-            и администратором.
-          </p>
-        </section>
-      ) : null}
+      <TopUp />
 
       <section className="grid gap-3">
         <Label>Мои работы</Label>

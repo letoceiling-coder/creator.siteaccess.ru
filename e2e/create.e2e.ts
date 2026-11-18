@@ -224,6 +224,67 @@ test.describe('create a photo session', () => {
     await expect(page.getByRole('button', { name: /Создать · 10 токенов/ })).toBeDisabled()
   })
 
+  test('cabinet: pay for a tariff and see the credited order', async ({ page }) => {
+    await mockApi(page)
+    const orderId = 'b'.repeat(24)
+    let paymentBody = ''
+    await page.route('**/api/tariffs', (route) =>
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          tariffs: [{ id: 'start', title: 'Старт', tokens: 100, price: 199 }],
+          payments: ['yookassa', 'tbank'],
+        }),
+      }),
+    )
+    await page.route('**/api/payments/providers', (route) =>
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ providers: ['yookassa', 'tbank'], receipts: false }),
+      }),
+    )
+    await page.route('**/api/payments', async (route) => {
+      paymentBody = route.request().postData() ?? ''
+      await route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify({ orderId, url: 'https://pay.example/checkout' }),
+      })
+    })
+    await page.route('https://pay.example/**', (route) =>
+      route.fulfill({ contentType: 'text/html', body: '<h1>Платёжная страница</h1>' }),
+    )
+    await page.route(`**/api/payments/${orderId}`, (route) =>
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: orderId,
+          title: 'Старт',
+          tokens: 100,
+          amount: 199,
+          provider: 'yookassa',
+          status: 'paid',
+          createdAt: Date.now(),
+        }),
+      }),
+    )
+
+    await page.goto('/cabinet', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('button', { name: 'ЮKassa' })).toBeVisible()
+    // Кабинет не выходит за ширину экрана (длинная ссылка-приглашение).
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    )
+    expect(overflow).toBeLessThanOrEqual(1)
+    await page.getByRole('button', { name: 'ЮKassa' }).click()
+    await expect(page).toHaveURL('https://pay.example/checkout')
+    expect(JSON.parse(paymentBody)).toMatchObject({ tariffId: 'start', provider: 'yookassa' })
+
+    await page.goto(`/cabinet?order=${orderId}`, { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('Оплата прошла')).toBeVisible()
+    await expect(page.getByText('зачислено 100 токенов')).toBeVisible()
+  })
+
   test('opens the video wizard from a template', async ({ page }) => {
     await mockApi(page)
     await page.goto('/video/viral-dance', { waitUntil: 'domcontentloaded' })

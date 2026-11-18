@@ -1,7 +1,7 @@
 /** Админка: пользователи и балансы, тарифы, цены и бонусы, интеграции, задачи. */
 import { HttpError, readJson, send } from './http.mjs'
 
-const SECRET_KEYS = ['clientSecret', 'botToken']
+const SECRET_KEYS = ['clientSecret', 'botToken', 'secretKey', 'password']
 const mask = (v) => (v ? `••••${String(v).slice(-4)}` : '')
 
 const int = (v, min, max, name) => {
@@ -11,7 +11,7 @@ const int = (v, min, max, name) => {
   return n
 }
 
-export function adminRoutes({ accounts, db, q, log }) {
+export function adminRoutes({ accounts, db, q, log, payments }) {
   const st = {
     stats: db.prepare(`SELECT
       (SELECT COUNT(*) FROM users) AS users,
@@ -55,8 +55,8 @@ export function adminRoutes({ accounts, db, q, log }) {
     }
   }
 
-  function integrationsView() {
-    const all = accounts.getSetting('integrations')
+  function integrationsView(key = 'integrations') {
+    const all = accounts.getSetting(key)
     const out = {}
     for (const [p, cfg] of Object.entries(all)) {
       out[p] = {}
@@ -211,6 +211,46 @@ export function adminRoutes({ accounts, db, q, log }) {
         st.tariffDel.run(tariffMatch[1])
         return send(res, 200, { tariffs: accounts.tariffs(true) })
       }
+    }
+
+    if (path === '/api/admin/payments') {
+      if (method === 'GET') return send(res, 200, { payments: integrationsView('payments') })
+      if (method === 'PUT') {
+        const body = await readJson(req)
+        const current = accounts.getSetting('payments')
+        for (const p of ['yookassa', 'tbank']) {
+          const next = body[p]
+          if (!next || typeof next !== 'object') continue
+          for (const key of Object.keys(current[p])) {
+            if (!(key in next)) continue
+            const value = next[key]
+            if (key === 'enabled') current[p].enabled = Boolean(value)
+            else if (SECRET_KEYS.includes(key)) {
+              if (value === null) current[p][key] = ''
+              else if (typeof value === 'string' && value.trim())
+                current[p][key] = value.trim().slice(0, 300)
+            } else
+              current[p][key] = String(value ?? '')
+                .trim()
+                .slice(0, 100)
+          }
+        }
+        if (body.receipts && typeof body.receipts === 'object') {
+          const r = body.receipts
+          current.receipts = {
+            enabled: Boolean(r.enabled ?? current.receipts.enabled),
+            taxation: int(r.taxation ?? current.receipts.taxation, 1, 6, 'система налогообложения'),
+            vat: int(r.vat ?? current.receipts.vat, 1, 12, 'ставка НДС'),
+          }
+        }
+        accounts.setSetting('payments', current)
+        log(`админ ${user.id.slice(0, 8)}: изменены настройки оплаты`)
+        return send(res, 200, { payments: integrationsView('payments') })
+      }
+    }
+
+    if (method === 'GET' && path === '/api/admin/orders') {
+      return send(res, 200, { orders: payments.recent() })
     }
 
     if (method === 'GET' && path === '/api/admin/jobs') {

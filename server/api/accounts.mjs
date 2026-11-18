@@ -17,6 +17,12 @@ export const defaults = {
     telegram: { enabled: false, botUsername: '', botToken: '' },
     max: { enabled: false, botToken: '' },
   },
+  /** Оплата тарифов. Чеки (54-ФЗ): taxation — код системы налогообложения ЮKassa (1–6), vat — код НДС (1 — без НДС). */
+  payments: {
+    yookassa: { enabled: false, shopId: '', secretKey: '' },
+    tbank: { enabled: false, terminalKey: '', password: '' },
+    receipts: { enabled: false, taxation: 2, vat: 1 },
+  },
 }
 
 const seedTariffs = [
@@ -183,7 +189,7 @@ export function openAccounts(db) {
     // Новые поля из defaults подмешиваются к сохранённым.
     if (base && typeof base === 'object') {
       const merged = { ...structuredClone(base), ...value }
-      if (key === 'integrations')
+      if (key === 'integrations' || key === 'payments')
         for (const p of Object.keys(base)) merged[p] = { ...base[p], ...(value[p] ?? {}) }
       return merged
     }

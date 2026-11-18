@@ -1,6 +1,7 @@
 /** Тесты API без GPU: npm run test:api */
 import assert from 'node:assert/strict'
 import { execFileSync, spawn } from 'node:child_process'
+import { createServer } from 'node:http'
 import { createHmac } from 'node:crypto'
 import { once } from 'node:events'
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
@@ -8,6 +9,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { after, before, test } from 'node:test'
+import { tbankToken } from './payments.mjs'
 
 const port = 3900 + Math.floor(Math.random() * 500)
 const base = `http://127.0.0.1:${port}`
@@ -27,7 +29,60 @@ const env = {
 }
 let child
 
+/* ── Поддельные ЮKassa и Т-Банк: настоящие платёжные API в тестах не вызываются ── */
+const fake = { yk: new Map(), tb: new Map(), ykAmountOverride: undefined }
+const fakePort = 4400 + Math.floor(Math.random() * 500)
+const fakeServer = createServer(async (req, res) => {
+  let raw = ''
+  for await (const chunk of req) raw += chunk
+  const body = raw ? JSON.parse(raw) : {}
+  const reply = (data, status = 200) => {
+    res.writeHead(status, { 'content-type': 'application/json' })
+    res.end(JSON.stringify(data))
+  }
+  if (req.url === '/yk/payments' && req.method === 'POST') {
+    assert.equal(
+      req.headers.authorization,
+      `Basic ${Buffer.from('123:test_sk').toString('base64')}`,
+    )
+    assert.ok(req.headers['idempotence-key'])
+    const id = `yk-${fake.yk.size + 1}`
+    fake.yk.set(id, {
+      id,
+      status: 'pending',
+      paid: false,
+      amount: body.amount,
+      metadata: body.metadata,
+    })
+    return reply({
+      ...fake.yk.get(id),
+      confirmation: { confirmation_url: `https://pay.example/${id}` },
+    })
+  }
+  const yk = /^\/yk\/payments\/(.+)$/.exec(req.url ?? '')
+  if (yk && req.method === 'GET') {
+    const payment = fake.yk.get(decodeURIComponent(yk[1]))
+    return reply(
+      fake.ykAmountOverride ? { ...payment, amount: { value: fake.ykAmountOverride } } : payment,
+    )
+  }
+  if (req.url === '/tb/Init') {
+    assert.equal(body.Token, tbankToken(body, 'pw'))
+    const id = String(9000 + fake.tb.size)
+    fake.tb.set(id, { OrderId: body.OrderId, Amount: body.Amount, Status: 'NEW' })
+    return reply({ Success: true, PaymentId: id, PaymentURL: `https://pay.example/tb/${id}` })
+  }
+  if (req.url === '/tb/GetState') {
+    const p = fake.tb.get(String(body.PaymentId))
+    return reply({ Success: true, PaymentId: body.PaymentId, ...p })
+  }
+  reply({ error: 'not found' }, 404)
+})
+env.YOOKASSA_URL = `http://127.0.0.1:${fakePort}/yk`
+env.TBANK_URL = `http://127.0.0.1:${fakePort}/tb`
+
 before(async () => {
+  await new Promise((resolve) => fakeServer.listen(fakePort, '127.0.0.1', resolve))
   // Администратор создаётся консольной командой, пароль — только через окружение.
   execFileSync(
     process.execPath,
@@ -57,6 +112,7 @@ before(async () => {
 })
 
 after(async () => {
+  fakeServer.close()
   child.kill()
   await once(child, 'exit')
   rmSync(dir, { recursive: true, force: true })
@@ -280,4 +336,94 @@ test('вход из мини-приложения Telegram проверяет п
     json: { platform: 'telegram', initData: params.toString() },
   })
   assert.equal(bad.status, 401)
+})
+
+test('оплата ЮKassa: статус перепроверяется в API, токены начисляются один раз', async () => {
+  const adm = await admin()
+  const saved = await adm('/api/admin/payments', {
+    method: 'PUT',
+    json: {
+      yookassa: { enabled: true, shopId: '123', secretKey: 'test_sk' },
+      tbank: { enabled: true, terminalKey: 'TDEMO', password: 'pw' },
+    },
+  })
+  assert.equal(saved.data.payments.yookassa.secretKey.set, true)
+  assert.ok(!JSON.stringify(saved.data).includes('test_sk'))
+  assert.deepEqual((await client()('/api/tariffs')).data.payments, ['yookassa', 'tbank'])
+
+  const { call } = await newUser()
+  const order = await call('/api/payments', {
+    method: 'POST',
+    json: { tariffId: 'start', provider: 'yookassa' },
+  })
+  assert.equal(order.status, 201, JSON.stringify(order.data))
+  assert.match(order.data.url, /^https:\/\/pay\.example\//)
+  assert.equal((await call(`/api/payments/${order.data.orderId}`)).data.status, 'pending')
+
+  // Уведомление о «успехе», пока ЮKassa говорит pending, ничего не начисляет.
+  const hook = { event: 'payment.succeeded', object: { id: 'yk-1' } }
+  await client()('/api/payments/yookassa/webhook', { method: 'POST', json: hook })
+  assert.equal((await call('/api/me')).data.user.balance, 30)
+
+  Object.assign(fake.yk.get('yk-1'), { status: 'succeeded', paid: true })
+  await client()('/api/payments/yookassa/webhook', { method: 'POST', json: hook })
+  await client()('/api/payments/yookassa/webhook', { method: 'POST', json: hook })
+  assert.equal((await call('/api/me')).data.user.balance, 130)
+  assert.equal((await call(`/api/payments/${order.data.orderId}`)).data.status, 'paid')
+
+  // Чужой пользователь заказ не видит.
+  const other = await newUser()
+  assert.equal((await other.call(`/api/payments/${order.data.orderId}`)).status, 404)
+})
+
+test('оплата ЮKassa: подменённая сумма не зачисляется', async () => {
+  const { call } = await newUser()
+  const order = await call('/api/payments', {
+    method: 'POST',
+    json: { tariffId: 'start', provider: 'yookassa' },
+  })
+  const id = [...fake.yk.keys()].at(-1)
+  Object.assign(fake.yk.get(id), { status: 'succeeded', paid: true })
+  fake.ykAmountOverride = '1.00'
+  await call(`/api/payments/${order.data.orderId}`)
+  fake.ykAmountOverride = undefined
+  assert.equal((await call('/api/me')).data.user.balance, 30)
+})
+
+test('оплата Т-Банк: подпись уведомления, сумма и однократность', async () => {
+  const { call } = await newUser()
+  const order = await call('/api/payments', {
+    method: 'POST',
+    json: { tariffId: 'optimal', provider: 'tbank' },
+  })
+  assert.equal(order.status, 201, JSON.stringify(order.data))
+  const paymentId = [...fake.tb.keys()].at(-1)
+  const notice = {
+    TerminalKey: 'TDEMO',
+    OrderId: order.data.orderId,
+    Success: true,
+    Status: 'CONFIRMED',
+    PaymentId: Number(paymentId),
+    ErrorCode: '0',
+    Amount: 49000,
+  }
+  const hook = (data) =>
+    fetch(`${base}/api/payments/tbank/webhook`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(data),
+    })
+
+  const forged = await hook({ ...notice, Token: '0'.repeat(64) })
+  assert.equal(forged.status, 400)
+  assert.equal((await call('/api/me')).data.user.balance, 30)
+
+  const wrongAmount = { ...notice, Amount: 100 }
+  await hook({ ...wrongAmount, Token: tbankToken(wrongAmount, 'pw') })
+  assert.equal((await call('/api/me')).data.user.balance, 30)
+
+  const ok = await hook({ ...notice, Token: tbankToken(notice, 'pw') })
+  assert.equal(await ok.text(), 'OK')
+  await hook({ ...notice, Token: tbankToken(notice, 'pw') })
+  assert.equal((await call('/api/me')).data.user.balance, 330)
 })

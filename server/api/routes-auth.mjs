@@ -24,7 +24,7 @@ import {
 
 const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,24}$/
 
-export function authRoutes({ accounts, config, log, ipOf }) {
+export function authRoutes({ accounts, config, log, ipOf, payments }) {
   // Защита от перебора паролей и массовой регистрации (значения можно поднять для тестов).
   const loginLimit = rateLimiter(config.loginLimit ?? 10, 15 * 60_000)
   const registerLimit = rateLimiter(config.registerLimit ?? 5, 60 * 60_000)
@@ -237,7 +237,7 @@ export function authRoutes({ accounts, config, log, ipOf }) {
           price: t.price,
           badge: t.badge || undefined,
         })),
-        payments: false,
+        payments: payments ? payments.enabledProviders() : [],
       })
     }
 
