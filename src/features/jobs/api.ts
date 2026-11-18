@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { ApiError, apiFetch, parse } from '@/features/auth/http.ts'
+import { ApiError, apiFetch, jsonInit, parse } from '@/features/auth/http.ts'
 
 export { ApiError }
 
@@ -30,6 +30,12 @@ const jobSchema = z.object({
   error: z.string().optional(),
   cost: z.number().optional(),
   refunded: z.boolean().optional(),
+  /** Бесплатная переделка доступна (не скачано, не позже 48 ч, ещё не использована). */
+  canRedo: z.boolean().optional(),
+  downloaded: z.boolean().optional(),
+  isRedo: z.boolean().optional(),
+  /** Что исправили в переделке — со слов рецензента. */
+  redoNote: z.string().optional(),
   createdAt: z.number(),
   finishedAt: z.number().optional(),
 })
@@ -77,6 +83,27 @@ export async function createSongJob(target: string) {
 
 export async function getJob(id: string): Promise<Job> {
   return parse(await apiFetch(`/api/jobs/${id}`, { cache: 'no-store' }), jobSchema)
+}
+
+export type RedoReason =
+  'face' | 'face_cut' | 'body' | 'outfit' | 'scene' | 'quality' | 'motion' | 'audio' | 'other'
+
+export async function redoJob(
+  id: string,
+  input: { reasons: RedoReason[]; comment: string; frames: number[] },
+) {
+  return parse(
+    await apiFetch(`/api/jobs/${id}/redo`, jsonInit('POST', input)),
+    z.object({ id: z.string(), diagnosis: z.string() }),
+  )
+}
+
+/** Отметка «скачано»: после неё переделка недоступна. */
+export async function markDownloaded(id: string): Promise<Job> {
+  return parse(
+    await apiFetch(`/api/jobs/${id}/downloaded`, { method: 'POST', keepalive: true }),
+    jobSchema,
+  )
 }
 
 export async function cancelJob(id: string): Promise<Job> {

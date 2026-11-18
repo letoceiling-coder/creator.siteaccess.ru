@@ -93,10 +93,12 @@ export function llmModule({ accounts, log }) {
     return cache.models
   }
 
-  async function viaOpenRouter(messages, json) {
+  /** paid — платные модели (недорогие), пробуются первыми; затем бесплатные. */
+  async function viaOpenRouter(messages, json, paid = []) {
     const key = cfg().apiKey
     if (!cfg().enabled || !key) throw new Error('OpenRouter не подключён')
-    const models = await freeModels(key)
+    const free = await freeModels(key).catch(() => [])
+    const models = [...paid, ...free]
     if (!models.length) throw new Error('нет бесплатных моделей')
     let last = new Error('нет ответа')
     for (const model of models) {
@@ -143,10 +145,10 @@ export function llmModule({ accounts, log }) {
 
   return {
     /** Ответ модели (JSON-объект при json=true) и то, какая модель ответила. */
-    async chat(messages, { json = false, localModel } = {}) {
+    async chat(messages, { json = false, localModel, paid = [] } = {}) {
       let result
       try {
-        result = await viaOpenRouter(messages, json)
+        result = await viaOpenRouter(messages, json, paid)
       } catch (error) {
         if (!/не подключён/.test(error.message))
           log(`OpenRouter → серверная модель (${error.message})`)

@@ -505,7 +505,7 @@ interface Integrations {
   vk: { enabled: boolean; clientId: string; clientSecret: Secret }
   telegram: { enabled: boolean; botUsername: string; botToken: Secret }
   max: { enabled: boolean; botToken: Secret }
-  openrouter: { enabled: boolean; apiKey: Secret; models: string }
+  openrouter: { enabled: boolean; apiKey: Secret; models: string; reviewModel: string }
 }
 
 function CopyLine({ value }: { value: string }) {
@@ -883,13 +883,21 @@ function IntegrationsPanel() {
             value={String(value('openrouter', 'models', current.openrouter.models))}
             onChange={(e) => set('openrouter', 'models', e.target.value)}
           />
+          <TextField
+            id="openrouter-review"
+            label="Модель-рецензент для «Переделать» (платная, недорогая)"
+            placeholder="deepseek/deepseek-v4-flash, google/gemini-2.5-flash-lite"
+            value={String(value('openrouter', 'reviewModel', current.openrouter.reviewModel))}
+            onChange={(e) => set('openrouter', 'reviewModel', e.target.value)}
+          />
         </div>,
         <Help
           steps={[
             'Создайте ключ на openrouter.ai (раздел Keys). Пополнять баланс не нужно: агент берёт только бесплатные модели (с окончанием :free и нулевой ценой).',
             'Вставьте ключ сюда, включите и сохраните. Запросы идут через тот же прокси, что и Telegram.',
             'Если OpenRouter недоступен или лимит бесплатных запросов исчерпан, агент сам переключится на модель на сервере (Ollama) — её имя задаётся на вкладке «Автопостинг».',
-            'Модели можно задать вручную через запятую, например deepseek/deepseek-chat-v3-0324:free. Платные модели игнорируются.',
+            'Модели можно задать вручную через запятую, например deepseek/deepseek-chat-v3-0324:free. Платные модели здесь игнорируются.',
+            'Для «Переделать» используется недорогая платная модель-рецензент (по умолчанию DeepSeek V4 Flash ≈ $0.09 за 1 млн токенов, одна переделка ≈ $0.0005). Ей уходят только промпты, оценки проверки и жалоба пользователя — без фото. Нужен небольшой баланс на OpenRouter; без него — бесплатные модели.',
           ]}
           links={[['OpenRouter: ключи', 'https://openrouter.ai/settings/keys']]}
         />,
@@ -2133,6 +2141,104 @@ function Autopost() {
   )
 }
 
+/* ── качество: переделки ── */
+
+interface FeedbackItem {
+  id: string
+  jobId: string
+  redoJobId?: string
+  kind: string
+  target: string
+  reasons: string[]
+  comment?: string
+  frames: number[]
+  diagnosis?: string
+  notes?: string
+  model?: string
+  createdAt: number
+}
+
+function Quality() {
+  const { data, error, reload } = useLoad<{
+    items: FeedbackItem[]
+    byReason: { name: string; n: number }[]
+    byTarget: { name: string; n: number }[]
+    reasons: Record<string, string>
+  }>('/api/admin/feedback')
+  if (error) return <Notice error={error} />
+  if (!data) return <IrisLoader size={32} label="Загрузка" />
+  const label = (r: string) => data.reasons[r] ?? r
+  return (
+    <div className="grid gap-8">
+      <Section title="Качество генераций">
+        <p className="text-body text-ink-muted">
+          Каждая переделка — сигнал, что ИИ ошибся. Здесь видно, на что жалуются и какие сюжеты
+          переделывают чаще: по ним стоит поправить шаблоны. Рецензент сравнивает жалобу с журналом
+          генерации (промпты, сиды, сходство лица) и предлагает правки.
+        </p>
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="bg-canvas-sunken grid content-start gap-2 p-4">
+            <span className="text-ink font-medium">Причины</span>
+            {data.byReason.length === 0 ? (
+              <span className="text-caption text-ink-muted">Переделок пока нет.</span>
+            ) : (
+              data.byReason.map((r) => (
+                <span key={r.name} className="flex justify-between gap-2">
+                  <span className="text-ink">{label(r.name)}</span>
+                  <span className="text-ink-muted tabular-nums">{r.n}</span>
+                </span>
+              ))
+            )}
+          </div>
+          <div className="bg-canvas-sunken grid content-start gap-2 p-4">
+            <span className="text-ink font-medium">Сюжеты, которые переделывают чаще</span>
+            {data.byTarget.slice(0, 10).map((r) => (
+              <span key={r.name} className="flex justify-between gap-2">
+                <span className="text-ink truncate">{r.name}</span>
+                <span className="text-ink-muted tabular-nums">{r.n}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+        <StudioButton variant="outline" onClick={reload}>
+          Обновить
+        </StudioButton>
+      </Section>
+      <Section title="Последние переделки">
+        <ul className="divide-line border-line grid divide-y border-y">
+          {data.items.map((f) => (
+            <li key={f.id} className="grid gap-1 py-3">
+              <span className="flex flex-wrap justify-between gap-2">
+                <span className="text-ink">
+                  {f.kind} · {f.target}
+                  {f.frames.length ? ` · кадры ${f.frames.map((i) => i + 1).join(', ')}` : ''}
+                </span>
+                <span className="text-caption text-ink-muted">{dt(f.createdAt)}</span>
+              </span>
+              <span className="text-caption text-danger">{f.reasons.map(label).join(' · ')}</span>
+              {f.comment ? (
+                <span className="text-body text-ink break-words">«{f.comment}»</span>
+              ) : null}
+              {f.diagnosis ? (
+                <span className="text-caption text-ink-muted break-words">
+                  Рецензент: {f.diagnosis}
+                </span>
+              ) : null}
+              {f.notes ? (
+                <span className="text-caption text-ink break-words">Для шаблона: {f.notes}</span>
+              ) : null}
+              <span className="text-caption text-ink-muted">
+                {f.model ?? '—'} · задача {f.jobId.slice(0, 8)}
+                {f.redoJobId ? ` → ${f.redoJobId.slice(0, 8)}` : ''}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </Section>
+    </div>
+  )
+}
+
 /* ── страница ── */
 
 type Tab =
@@ -2144,6 +2250,7 @@ type Tab =
   | 'integrations'
   | 'posts'
   | 'autopost'
+  | 'quality'
   | 'jobs'
 const tabs: { id: Tab; label: string }[] = [
   { id: 'overview', label: 'Сводка' },
@@ -2154,6 +2261,7 @@ const tabs: { id: Tab; label: string }[] = [
   { id: 'integrations', label: 'Интеграции' },
   { id: 'posts', label: 'Публикации' },
   { id: 'autopost', label: 'Автопостинг' },
+  { id: 'quality', label: 'Качество' },
   { id: 'jobs', label: 'Задачи' },
 ]
 
@@ -2194,6 +2302,7 @@ export function AdminPage() {
       {tab === 'integrations' ? <IntegrationsPanel /> : null}
       {tab === 'posts' ? <Publications /> : null}
       {tab === 'autopost' ? <Autopost /> : null}
+      {tab === 'quality' ? <Quality /> : null}
       {tab === 'jobs' ? <Jobs /> : null}
     </div>
   )

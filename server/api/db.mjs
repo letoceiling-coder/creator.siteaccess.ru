@@ -30,6 +30,20 @@ export function openDb(path) {
     CREATE INDEX IF NOT EXISTS jobs_client ON jobs (client, created_at);
   `)
 
+  // Журнал генерации и переделки (колонки добавляются к старой базе).
+  for (const column of [
+    'trace TEXT',
+    'downloaded INTEGER NOT NULL DEFAULT 0',
+    'redo_of TEXT',
+    'redo_used INTEGER NOT NULL DEFAULT 0',
+  ]) {
+    try {
+      db.exec(`ALTER TABLE jobs ADD COLUMN ${column}`)
+    } catch {
+      // колонка уже есть
+    }
+  }
+
   const q = {
     insert: db.prepare(
       `INSERT INTO jobs (id, token_hash, kind, target, options, photos, status, total, client, created_at)
@@ -64,6 +78,14 @@ export function openDb(path) {
       `SELECT id FROM jobs WHERE status IN ('done', 'failed', 'cancelled') AND finished_at < ?`,
     ),
     expire: db.prepare(`UPDATE jobs SET status = 'expired', results = '[]' WHERE id = ?`),
+    saveTrace: db.prepare('UPDATE jobs SET trace = ? WHERE id = ?'),
+    markDownloaded: db.prepare('UPDATE jobs SET downloaded = 1 WHERE id = ?'),
+    useRedo: db.prepare('UPDATE jobs SET redo_used = 1 WHERE id = ? AND redo_used = 0'),
+    setRedoOf: db.prepare('UPDATE jobs SET redo_of = ? WHERE id = ?'),
+    /** Задачи, чьи фото пора удалить: окно переделки закрылось. */
+    inputsExpired: db.prepare(
+      `SELECT id FROM jobs WHERE status = 'done' AND finished_at < ? AND finished_at > ?`,
+    ),
   }
 
   return { db, q }

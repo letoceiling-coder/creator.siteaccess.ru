@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url'
 import { after, before, test } from 'node:test'
 import { tbankToken } from './payments.mjs'
 import { inWindow, nextRunAt } from './autopost.mjs'
+import { DatabaseSync } from 'node:sqlite'
 
 const port = 3900 + Math.floor(Math.random() * 500)
 const base = `http://127.0.0.1:${port}`
@@ -127,6 +128,19 @@ const fakeServer = createServer(async (req, res) => {
       .map((m) => m.content)
       .join(' ')
     const json = (data) => reply({ choices: [{ message: { content: JSON.stringify(data) } }] })
+    if (sys.includes('инженер качества')) {
+      fake.review = { model: body.model, log: JSON.parse(body.messages[1].content) }
+      return json({
+        diagnosis:
+          'Лицо на кадрах 1 и 3 получилось непохожим — пересоздадим их со строгой проверкой.',
+        notes: 'В шаблоне слишком мелкий план для лица.',
+        strict_identity: true,
+        negative: 'different face',
+        shots: [
+          { index: 1, add: 'closer medium shot, face large and sharp', negative: 'tiny face' },
+        ],
+      })
+    }
     if (sys.includes('модератор')) {
       fake.moderated = [...(fake.moderated ?? []), said]
       return json({ allowed: !said.includes('ножом'), category: 'violence', reason: 'угроза' })
@@ -1262,4 +1276,107 @@ test('свой сюжет: модерация, вопросы агента, со
   fakeSong.append('kind', 'song')
   fakeSong.append('target', 'champagne-party')
   assert.equal((await call('/api/jobs', { method: 'POST', body: fakeSong })).status, 404)
+})
+
+test('переделка: журнал генерации, рецензент, одна бесплатная переделка, закрыта после скачивания', async () => {
+  const { call } = await newUser()
+  const before = (await call('/api/me')).data.user.balance
+  const created = await call('/api/jobs', { method: 'POST', body: form({}) })
+  assert.equal(created.status, 201, JSON.stringify(created.data))
+  const id = created.data.id
+  // Воркер в тестах выключен: «завершаем» задачу в базе, как это сделал бы он.
+  const db = new DatabaseSync(join(dir, 'jobs.sqlite'))
+  const finish = db.prepare(
+    "UPDATE jobs SET status = 'done', finished_at = ?, results = ?, trace = ? WHERE id = ?",
+  )
+  const results = JSON.stringify(
+    [1, 2, 3, 4, 5].map((i) => ({
+      type: 'photo',
+      src: `/media/jobs/${id}/${i}.webp`,
+      download: `/media/jobs/${id}/${i}.jpg`,
+      width: 1,
+      height: 1,
+    })),
+  )
+  const trace = JSON.stringify([
+    {
+      type: 'frame',
+      index: 0,
+      prompt: 'Close-up portrait on a neon rooftop',
+      attempts: [{ seed: 70000, faceVisible: true, similarity: 0.41 }],
+    },
+  ])
+  finish.run(Date.now(), results, trace, id)
+  assert.equal((await call(`/api/jobs/${id}`)).data.canRedo, true)
+
+  const other = await newUser()
+  assert.equal(
+    (await other.call(`/api/jobs/${id}/redo`, { method: 'POST', json: { reasons: ['face'] } }))
+      .status,
+    404,
+  )
+  assert.equal(
+    (await call(`/api/jobs/${id}/redo`, { method: 'POST', json: { reasons: [] } })).status,
+    400,
+  )
+
+  fake.review = undefined
+  const redo = await call(`/api/jobs/${id}/redo`, {
+    method: 'POST',
+    json: { reasons: ['face', 'body'], comment: 'лицо другое', frames: [0, 2, 9] },
+  })
+  assert.equal(redo.status, 201, JSON.stringify(redo.data))
+  assert.match(redo.data.diagnosis, /непохожим/)
+  // Рецензент — недорогая платная модель; ему уходит журнал генерации и жалоба, без картинок.
+  assert.equal(fake.review.model, 'deepseek/deepseek-v4-flash')
+  assert.equal(fake.review.log.generationLog[0].attempts[0].similarity, 0.41)
+  assert.deepEqual(fake.review.log.userReasons, [
+    'Лицо не похоже на меня',
+    'Искажены руки или тело',
+  ])
+  assert.deepEqual(fake.review.log.framesToRedo, [1, 3])
+
+  const next = await call(`/api/jobs/${redo.data.id}`)
+  assert.equal(next.data.isRedo, true)
+  assert.equal(next.data.canRedo, false)
+  assert.equal(next.data.cost, 0)
+  assert.equal(next.data.total, 2)
+  assert.match(next.data.redoNote, /непохожим/)
+  const options = JSON.parse(
+    db.prepare('SELECT options FROM jobs WHERE id = ?').get(redo.data.id).options,
+  )
+  assert.equal(options.fixes.strict, true)
+  assert.deepEqual(options.fixes.frames, [0, 2])
+  assert.equal(options.fixes.shots['0'].add, 'closer medium shot, face large and sharp')
+  assert.equal(options.redoOf, id)
+  assert.equal((await call('/api/me')).data.user.balance, before - 12)
+
+  // Одна переделка на задачу.
+  assert.equal((await call(`/api/jobs/${id}`)).data.canRedo, false)
+  assert.equal(
+    (await call(`/api/jobs/${id}/redo`, { method: 'POST', json: { reasons: ['face'] } })).status,
+    409,
+  )
+
+  // После скачивания переделка закрыта.
+  await call(`/api/jobs/${redo.data.id}/cancel`, { method: 'POST' })
+  const second = await call('/api/jobs', { method: 'POST', body: form({}) })
+  finish.run(Date.now(), results, trace, second.data.id)
+  const marked = await call(`/api/jobs/${second.data.id}/downloaded`, { method: 'POST' })
+  assert.equal(marked.data.downloaded, true)
+  assert.equal(marked.data.canRedo, false)
+  const blocked = await call(`/api/jobs/${second.data.id}/redo`, {
+    method: 'POST',
+    json: { reasons: ['face'] },
+  })
+  assert.equal(blocked.status, 409)
+  assert.match(blocked.data.error, /скачан/)
+  db.close()
+
+  const adm = await admin()
+  const feedback = await adm('/api/admin/feedback')
+  assert.equal(feedback.data.items[0].jobId, id)
+  assert.equal(feedback.data.items[0].notes, 'В шаблоне слишком мелкий план для лица.')
+  assert.ok(feedback.data.byReason.some((r) => r.name === 'face'))
+  assert.equal((await call('/api/admin/feedback')).status, 403)
 })

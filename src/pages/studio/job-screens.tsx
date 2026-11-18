@@ -17,6 +17,7 @@ import {
   finalStatuses,
   getJob,
   listJobs,
+  markDownloaded,
   PHOTO_TYPES,
   type Job,
   type JobKind,
@@ -27,6 +28,7 @@ import { motions } from '@/features/jobs/motions.ts'
 import { usePlatform } from '@/features/platform/use-platform.ts'
 import { cn } from '@/shared/cn.ts'
 import { OrderBanner, TopUp } from './payment-section.tsx'
+import { RedoPanel } from './redo-panel.tsx'
 import { InviteCard, SubscribeCard } from './reward-cards.tsx'
 
 /** Что создаём: фотосессию по сценарию или ролик по шаблону. */
@@ -577,11 +579,13 @@ export function JobScreen({
   describe,
   onRetry,
   onCabinet,
+  onOpenJob,
 }: {
   jobId: string
   describe: (kind: JobKind, target: string) => { title: string; cover: string } | undefined
   onRetry: (kind: JobKind, target: string) => void
   onCabinet: () => void
+  onOpenJob: (id: string) => void
 }) {
   const { job, setJob, error, missing } = useJob(jobId)
   const [cancelling, setCancelling] = useState(false)
@@ -626,6 +630,13 @@ export function JobScreen({
   }
 
   const working = job.status === 'queued' || job.status === 'running'
+  // Скачивание закрывает бесплатную переделку: отмечаем на сервере.
+  const noteDownload = () => {
+    if (job.downloaded) return
+    markDownloaded(job.id)
+      .then(setJob)
+      .catch(() => undefined)
+  }
 
   return (
     <div className="mx-auto grid max-w-xl gap-6 px-4 pt-8 md:px-6">
@@ -654,6 +665,7 @@ export function JobScreen({
                     <a
                       href={r.download}
                       download
+                      onClick={noteDownload}
                       className="chamfer-sm bg-canvas-sunken text-ink hover:bg-canvas-overlay inline-flex min-h-11 items-center justify-center gap-2"
                     >
                       <Download size={16} aria-hidden="true" /> Скачать MP3
@@ -681,6 +693,7 @@ export function JobScreen({
                     <a
                       href={r.download}
                       download
+                      onClick={noteDownload}
                       className="chamfer-sm bg-canvas-raised text-ink hover:bg-canvas-overlay inline-flex min-h-11 items-center justify-center gap-2"
                     >
                       <Download size={16} aria-hidden="true" /> Скачать ролик
@@ -710,6 +723,7 @@ export function JobScreen({
                     <a
                       href={r.download}
                       download={`kadr-${i + 1}.jpg`}
+                      onClick={noteDownload}
                       aria-label={`Скачать кадр ${i + 1}`}
                       className="absolute right-0 bottom-0 grid size-11 place-items-center text-white"
                     >
@@ -721,6 +735,18 @@ export function JobScreen({
                 ),
               )}
             </div>
+            {job.isRedo && job.redoNote ? (
+              <Alert tone="info" title="Переделка">
+                {job.redoNote}
+              </Alert>
+            ) : null}
+            {job.canRedo ? (
+              <RedoPanel job={job} onStarted={onOpenJob} />
+            ) : job.downloaded && !job.isRedo ? (
+              <p className="text-caption text-ink-muted">
+                Результат скачан — бесплатная переделка больше недоступна.
+              </p>
+            ) : null}
             <ActionBar>
               <StudioButton variant="outline" onClick={onCabinet}>
                 Все мои задачи

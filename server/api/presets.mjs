@@ -183,6 +183,70 @@ function customPlan(kind, target) {
   return undefined
 }
 
+/**
+ * Переделка: правки рецензента к плану — выбранные кадры, добавки к промптам и негативу,
+ * новые сиды и строгий контроль сходства. План остаётся тем же сюжетом.
+ */
+export function applyFixes(kind, plan, fixes) {
+  if (!plan || !fixes) return plan
+  const shift = fixes.seedShift ?? 50_000
+  const add = (prompt, i) => {
+    const extra = fixes.shots?.[i]?.add
+    return extra ? `${prompt} ${extra}` : prompt
+  }
+  const neg = (i) => [fixes.negative, fixes.shots?.[i]?.negative].filter(Boolean).join(', ')
+  const strict = Boolean(fixes.strict)
+  if (kind === 'photo') {
+    const keep = fixes.frames?.length ? fixes.frames : plan.map((_, i) => i)
+    return plan
+      .map((shot, i) => ({
+        ...shot,
+        prompt: add(shot.prompt, i),
+        seed: shot.seed + shift,
+        negativeExtra: neg(i),
+        strict,
+      }))
+      .filter((_, i) => keep.includes(i))
+  }
+  if (kind === 'video')
+    return {
+      ...plan,
+      shots: plan.shots.map((shot, i) => ({
+        ...shot,
+        still: {
+          ...shot.still,
+          prompt: add(shot.still.prompt, i),
+          seed: shot.still.seed + shift,
+          negativeExtra: neg(i),
+          strict,
+        },
+        video: {
+          ...shot.video,
+          prompt: fixes.shots?.[i]?.motion
+            ? `${shot.video.prompt}, ${fixes.shots[i].motion}`
+            : shot.video.prompt,
+          seed: shot.video.seed + shift,
+        },
+      })),
+    }
+  if (kind === 'animate')
+    return {
+      ...plan,
+      clips: plan.clips.map((clip, i) => ({
+        ...clip,
+        prompt: add(clip.prompt, i),
+        seed: clip.seed + shift,
+      })),
+    }
+  if (kind === 'song')
+    return {
+      ...plan,
+      tags: fixes.shots?.[0]?.add ? `${plan.tags}, ${fixes.shots[0].add}` : plan.tags,
+      seedShift: shift,
+    }
+  return plan
+}
+
 export function planFor(kind, target, options) {
   if (isCustom(target)) return customPlan(kind, target)
   if (kind === 'video') return videoPlan(target, options)

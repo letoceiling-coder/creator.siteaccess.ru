@@ -12,7 +12,9 @@ const int = (v, min, max, name) => {
   return n
 }
 
-export function adminRoutes({ accounts, db, q, log, payments, bots, channels, autopost }) {
+const method0 = (req) => req.method
+
+export function adminRoutes({ accounts, db, q, log, payments, bots, channels, autopost, redo }) {
   const st = {
     stats: db.prepare(`SELECT
       (SELECT COUNT(*) FROM users) AS users,
@@ -88,6 +90,8 @@ export function adminRoutes({ accounts, db, q, log, payments, bots, channels, au
     if (user.role !== 'admin') throw new HttpError(403, 'Нужны права администратора')
     if (channels?.owns(path)) return channels.handle(req, res, path, user)
     if (autopost?.owns(path)) return autopost.handle(req, res, path, user)
+    if (method0(req) === 'GET' && path === '/api/admin/feedback' && redo)
+      return send(res, 200, redo.feedback())
     const method = req.method
     const day = Date.now() - 86_400_000
 

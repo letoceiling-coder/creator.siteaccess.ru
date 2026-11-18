@@ -32,7 +32,7 @@ import {
   videoFaceRatio,
 } from '../factory/faces.mjs'
 import { toJpeg, toWebp } from './images.mjs'
-import { negative, planFor } from './presets.mjs'
+import { applyFixes, negative, planFor } from './presets.mjs'
 
 const run = promisify(execFile)
 
@@ -42,6 +42,10 @@ const now = () => Date.now()
 
 /** Цель по сходству лица (SFace): ниже — кадр пересоздаётся (порог «тот же человек» 0.363). */
 const GOOD_LIKENESS = Math.max(SAME_PERSON, Number(process.env.GOOD_LIKENESS ?? 0.5))
+/** При переделке с жалобой на лицо — строже: выше порог сходства и больше попыток. */
+const STRICT_LIKENESS = Math.max(GOOD_LIKENESS, 0.6)
+/** Фото пользователя хранятся для переделки двое суток после готовности задачи. */
+export const REDO_WINDOW_MS = 48 * 3_600_000
 /** Доля кадров ролика, где лицо — тот же человек, что на фото. */
 const MIN_SAME_RATIO = 0.8
 const cropHint =
@@ -65,12 +69,16 @@ export function startWorker({ q, config, log, onFinish = () => {} }) {
 
   q.requeueRunning.run()
 
+  /** Журнал генерации: промпты, сиды и оценки проверки по каждой попытке (для переделки). */
+  const traces = new Map()
+  const trace = (job, entry) => traces.get(job.id)?.push(entry)
+
   function checkCancel(id) {
     if (q.get.get(id)?.cancel_requested) throw new Cancelled()
   }
 
-  function cleanupInputs(id) {
-    rmSync(join(config.uploadDir, id), { recursive: true, force: true })
+  /** Временные файлы ComfyUI задачи. */
+  function cleanupComfy(id) {
     // Копии в ComfyUI: входы и промежуточные PNG этой задачи.
     for (const [sub, prefix] of [
       ['input', `creator-u-${id}`],
@@ -82,6 +90,11 @@ export function startWorker({ q, config, log, onFinish = () => {} }) {
         if (name.startsWith(prefix)) rmSync(join(dir, name), { force: true })
       }
     }
+  }
+  /** Фото пользователя и временные файлы задачи. */
+  function cleanupInputs(id) {
+    rmSync(join(config.uploadDir, id), { recursive: true, force: true })
+    cleanupComfy(id)
   }
 
   /**
@@ -111,7 +124,7 @@ export function startWorker({ q, config, log, onFinish = () => {} }) {
         qwenEditWorkflow({
           images: ref.images,
           prompt: shot.prompt + ref.hint,
-          negative,
+          negative: shot.negativeExtra ? `${negative}, ${shot.negativeExtra}` : negative,
           seed: shot.seed,
           width: shot.width,
           height: shot.height,
@@ -149,7 +162,16 @@ export function startWorker({ q, config, log, onFinish = () => {} }) {
    */
   async function editWithFace(job, ref, shot, index, upscale, minFaces = 1) {
     let best = { score: -Infinity, buf: undefined }
-    for (let attempt = 0; attempt < 3; attempt++) {
+    const goal = shot.strict ? STRICT_LIKENESS : GOOD_LIKENESS
+    const record = {
+      type: 'frame',
+      index,
+      prompt: shot.prompt,
+      negative: shot.negativeExtra || undefined,
+      attempts: [],
+    }
+    trace(job, record)
+    for (let attempt = 0; attempt < (shot.strict ? 4 : 3); attempt++) {
       checkCancel(job.id)
       const buf = await edit(
         job,
@@ -161,8 +183,14 @@ export function startWorker({ q, config, log, onFinish = () => {} }) {
       const id = await identity(buf, ref.refs, minFaces)
       const similarity = id.similarity ?? (id.ok ? 1 : 0)
       const score = (id.ok ? 1 : 0) + similarity
+      record.attempts.push({
+        seed: shot.seed + attempt * 1009,
+        faceVisible: Boolean(id.ok),
+        similarity: Number(similarity.toFixed(3)),
+        reason: id.ok ? undefined : id.reason,
+      })
       if (score > best.score) best = { score, buf }
-      if (id.ok && similarity >= GOOD_LIKENESS) return buf
+      if (id.ok && similarity >= goal) return buf
       log(
         `задача ${job.id.slice(0, 8)}: кадр ${index + 1} ${id.ok ? '' : 'без лица целиком, '}сходство ${similarity.toFixed(2)}, попытка ${attempt + 2}`,
       )
@@ -174,6 +202,8 @@ export function startWorker({ q, config, log, onFinish = () => {} }) {
   async function clipWithFace(job, imageBuf, tag, clip, width, height, file, refs, minFaces = 1) {
     let best = { score: -1, path: '' }
     const need = minFaces > 1 ? MIN_PAIR_RATIO : MIN_FACE_RATIO
+    const record = { type: 'clip', tag, prompt: clip.prompt, attempts: [] }
+    trace(job, record)
     for (let attempt = 0; attempt < 3; attempt++) {
       checkCancel(job.id)
       const path = `${file}.try${attempt}.mp4`
@@ -187,6 +217,12 @@ export function startWorker({ q, config, log, onFinish = () => {} }) {
         path,
       )
       const r = await clipIdentity(path, refs, minFaces)
+      record.attempts.push({
+        seed: clip.seed + attempt * 7919,
+        faceInFrame: Number(r.ratio.toFixed(2)),
+        samePerson: Number(r.sameRatio.toFixed(2)),
+        similarity: Number((r.similarity ?? 0).toFixed(3)),
+      })
       const score = r.ratio + r.sameRatio
       if (score > best.score) {
         if (best.path) rmSync(best.path, { force: true })
@@ -345,7 +381,7 @@ export function startWorker({ q, config, log, onFinish = () => {} }) {
           bpm: plan.bpm,
           seconds: plan.seconds,
           keyscale: 'C major',
-          seed: Number.parseInt(job.id.slice(0, 6), 16),
+          seed: Number.parseInt(job.id.slice(0, 6), 16) + (plan.seedShift ?? 0),
           prefix: `creator-user/${job.id}-song`,
         }),
         { front: true, timeoutMs: 900_000 },
@@ -433,8 +469,18 @@ export function startWorker({ q, config, log, onFinish = () => {} }) {
     mkdirSync(out, { recursive: true })
     log(`задача ${job.id.slice(0, 8)} (${job.kind}/${job.target}) начата`)
     try {
-      const plan = planFor(job.kind, job.target, JSON.parse(job.options))
+      const options = JSON.parse(job.options)
+      const plan = applyFixes(job.kind, planFor(job.kind, job.target, options), options.fixes)
       if (!plan) throw new Error('План задачи не найден')
+      traces.set(job.id, [])
+      if (job.kind === 'song')
+        trace(job, {
+          type: 'song',
+          tags: plan.tags,
+          bpm: plan.bpm,
+          language: plan.language,
+          vocal: plan.vocal,
+        })
       const make =
         job.kind === 'video'
           ? videoJob
@@ -466,12 +512,18 @@ export function startWorker({ q, config, log, onFinish = () => {} }) {
         log(`задача ${job.id.slice(0, 8)} ошибка: ${error.message}`)
       }
     } finally {
-      cleanupInputs(job.id)
+      q.saveTrace.run(JSON.stringify(traces.get(job.id) ?? []), job.id)
+      traces.delete(job.id)
+      // Фото готовой задачи остаются для переделки (окно 48 ч или до скачивания); остальное — сразу.
+      if (q.get.get(job.id)?.status === 'done') cleanupComfy(job.id)
+      else cleanupInputs(job.id)
       busy = false
     }
   }
 
   function expire() {
+    for (const { id } of q.inputsExpired.all(now() - REDO_WINDOW_MS, now() - 14 * 86_400_000))
+      rmSync(join(config.uploadDir, id), { recursive: true, force: true })
     const border = now() - config.keepResultsMs
     for (const { id } of q.expired.all(border)) {
       rmSync(join(config.mediaDir, 'jobs', id), { recursive: true, force: true })

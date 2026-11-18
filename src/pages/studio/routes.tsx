@@ -254,6 +254,7 @@ export function JobPage() {
       jobId={id}
       describe={describe}
       onCabinet={() => void navigate(paths.cabinet)}
+      onOpenJob={(next) => void navigate(paths.job(next))}
       onRetry={(kind, target) =>
         void navigate(
           isCustomTarget(target) || kind === 'song'

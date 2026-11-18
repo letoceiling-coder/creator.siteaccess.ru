@@ -17,7 +17,7 @@ export const defaults = {
     telegram: { enabled: false, botUsername: '', botToken: '' },
     max: { enabled: false, botToken: '', botUsername: '' },
     /** Тексты и сценарии агента публикаций; models — свой список бесплатных моделей через запятую. */
-    openrouter: { enabled: false, apiKey: '', models: '' },
+    openrouter: { enabled: false, apiKey: '', models: '', reviewModel: '' },
   },
   /** Оплата тарифов. Чеки (54-ФЗ): taxation — код системы налогообложения ЮKassa (1–6), vat — код НДС (1 — без НДС). */
   payments: {

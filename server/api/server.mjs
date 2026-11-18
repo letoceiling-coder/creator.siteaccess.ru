@@ -25,6 +25,7 @@ import { channelsModule } from './channels.mjs'
 import { autopostModule } from './autopost.mjs'
 import { llmModule } from './llm.mjs'
 import { scenariosModule } from './scenarios.mjs'
+import { redoModule } from './redo.mjs'
 import { paymentsModule } from './payments.mjs'
 import { adminRoutes } from './routes-admin.mjs'
 import { authRoutes } from './routes-auth.mjs'
@@ -89,6 +90,7 @@ const bots = botsModule({ db, accounts, config, log, channels })
 const llm = llmModule({ accounts, log })
 const scenarios = scenariosModule({ db, accounts, llm, log })
 setCustomLoader((id) => scenarios.load(id))
+const redo = redoModule({ db, q, accounts, llm, config, log })
 const autopost = autopostModule({
   db,
   accounts,
@@ -101,7 +103,7 @@ const autopost = autopostModule({
 if (env.WORKER !== 'off') autopost.start()
 if (env.WORKER !== 'off') bots.startTelegram()
 const handleAuth = authRoutes({ accounts, config, log, ipOf, payments, bots })
-const handleAdmin = adminRoutes({ accounts, db, q, log, payments, bots, channels, autopost })
+const handleAdmin = adminRoutes({ accounts, db, q, log, payments, bots, channels, autopost, redo })
 
 function positionOf(job) {
   if (job.status !== 'queued') return 0
@@ -121,6 +123,10 @@ function view(job) {
     error: job.error ?? undefined,
     cost: job.cost ?? 0,
     refunded: Boolean(job.refunded),
+    canRedo: redo.canRedo(job),
+    downloaded: Boolean(job.downloaded),
+    isRedo: Boolean(job.redo_of),
+    redoNote: job.redo_of ? redo.noteFor(job.id) : undefined,
     createdAt: job.created_at,
     finishedAt: job.finished_at ?? undefined,
   }
@@ -323,11 +329,17 @@ async function handle(req, res) {
     if (!user) throw new HttpError(401, 'Войдите в аккаунт')
     return send(res, 200, { jobs: q.listFor.all(user.id).map(view) })
   }
-  const match = /^\/api\/jobs\/([0-9a-f]{32})(\/cancel)?$/.exec(path)
+  const match = /^\/api\/jobs\/([0-9a-f]{32})(\/cancel|\/redo|\/downloaded)?$/.exec(path)
   if (match) {
-    const [, id, cancel] = match
+    const [, id, action] = match
+    const cancel = action === '/cancel'
     const job = ownJob(user, id)
-    if (!cancel && req.method === 'GET') return send(res, 200, view(job))
+    if (!action && req.method === 'GET') return send(res, 200, view(job))
+    if (action === '/redo' && req.method === 'POST') return redo.redo(req, res, user, job)
+    if (action === '/downloaded' && req.method === 'POST') {
+      if (job.user_id === user.id) redo.downloaded(job)
+      return send(res, 200, view(q.get.get(id)))
+    }
     if (cancel && req.method === 'POST') {
       if (job.status === 'queued') {
         if (q.cancel.run(Date.now(), id).changes === 1) {
