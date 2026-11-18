@@ -293,6 +293,7 @@ async function handle(req, res) {
   const user = accounts.userBySession(cookies(req)[SESSION_COOKIE])
 
   if (path.startsWith('/api/admin/')) return handleAdmin(req, res, path, user)
+  if (path.startsWith('/api/rewards')) return channels.handleRewards(req, res, path, user)
   if (path.startsWith('/api/bots/') || path.startsWith('/api/auth/link')) {
     await bots.handle(req, res, path)
     if (res.headersSent) return

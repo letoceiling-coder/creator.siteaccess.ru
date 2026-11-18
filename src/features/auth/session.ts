@@ -25,6 +25,7 @@ export const meSchema = z.object({
     daily: z.number(),
     referrer: z.number(),
     invitee: z.number(),
+    subscribe: z.number().optional(),
   }),
   referralUrl: z.string(),
 })

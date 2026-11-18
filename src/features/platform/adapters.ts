@@ -20,6 +20,9 @@ export function createBrowserAdapter(viewportHeight: number | null): PlatformAda
     bindBack: () => () => undefined,
     getInitData: () => undefined,
     share: () => Promise.resolve(false),
+    openLink: (url) => {
+      window.open(url, '_blank', 'noopener')
+    },
   }
 }
 
@@ -46,6 +49,11 @@ export function createTelegramAdapter(input: AdapterInput): PlatformAdapter {
       const params = new URLSearchParams({ url, text })
       host.openTelegramLink(`https://t.me/share/url?${params.toString()}`)
       return Promise.resolve(true)
+    },
+    openLink: (url) => {
+      if (url.startsWith('https://t.me/') && host?.openTelegramLink) host.openTelegramLink(url)
+      else if (host?.openLink) host.openLink(url)
+      else window.open(url, '_blank', 'noopener')
     },
   }
 }
@@ -75,6 +83,11 @@ export function createMaxAdapter(input: AdapterInput): PlatformAdapter {
         // пользователь закрыл экран
       }
       return true
+    },
+    openLink: (url) => {
+      if (url.startsWith('https://max.ru/') && host?.openMaxLink) host.openMaxLink(url)
+      else if (host?.openLink) host.openLink(url)
+      else window.open(url, '_blank', 'noopener')
     },
   }
 }

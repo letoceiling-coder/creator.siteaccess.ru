@@ -1,4 +1,4 @@
-import { Coins, Film, Gift, ScanFace, Share2, Sparkles } from 'lucide-react'
+import { Coins, Film, Gift, ScanFace, Sparkles } from 'lucide-react'
 import { videoTemplates } from '@/features/catalog/video-data.ts'
 import { AnimatePresence, motion } from 'motion/react'
 import { useMemo, useState } from 'react'
@@ -11,6 +11,7 @@ import { useMedia } from '@/features/media/use-media.ts'
 import { usePaged } from '@/hooks/use-paged.ts'
 import { StudioButton } from '@/components/studio/studio-button.tsx'
 import { heroDeck, scenarios, type Scenario } from '@/features/catalog/data.ts'
+import { InviteCard, SubscribeCard } from './reward-cards.tsx'
 
 const enter = { duration: 0.36, ease: [0.22, 1, 0.36, 1] as const }
 
@@ -210,38 +211,45 @@ export function HomeScreen({
         </section>
       ) : null}
 
-      <section className="grid gap-4 px-4 md:grid-cols-3 md:px-6">
-        {[
-          [
-            Gift,
-            'Бонус при регистрации',
-            'Новым пользователям — токены на первые фотосессии. Вход через почту, Яндекс, VK или Telegram.',
-          ],
-          [
-            Coins,
-            'Бесплатно каждый день',
-            'Если токены закончились, каждый день на баланс приходят бесплатные — снова можно творить.',
-          ],
-          [
-            Share2,
-            'Приглашайте друзей',
-            'Поделитесь своей ссылкой из кабинета: другу — бонус сразу, вам — когда он создаст первую работу.',
-          ],
-        ].map(([Icon, title, text]) => {
-          const I = Icon as typeof Gift
-          return (
-            <div
-              key={String(title)}
-              className="chamfer ticks bg-canvas-raised grid content-start gap-3 p-5"
-            >
-              <span className="bg-accent-fill text-accent-ink chamfer-sm grid size-11 place-items-center">
-                <I size={20} aria-hidden="true" />
-              </span>
-              <h3 className="font-display text-ink text-lg">{String(title)}</h3>
-              <p className="text-body text-ink-muted">{String(text)}</p>
-            </div>
-          )
-        })}
+      <section className="grid gap-5 px-4 md:px-6">
+        <div>
+          <Label>Бонусы</Label>
+          <h2 className="font-display text-title text-ink mt-2">Токены в подарок</h2>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <SubscribeCard />
+          <InviteCard />
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          {[
+            [
+              Gift,
+              'Бонус при регистрации',
+              'Новым пользователям — токены на первые фотосессии. Вход через почту, Яндекс, VK, Telegram или MAX.',
+            ],
+            [
+              Coins,
+              'Бесплатно каждый день',
+              'Если токены закончились, каждый день на баланс приходят бесплатные — снова можно творить.',
+            ],
+          ].map(([Icon, title, text]) => {
+            const I = Icon as typeof Gift
+            return (
+              <div
+                key={String(title)}
+                className="chamfer-sm bg-canvas-raised grid grid-cols-[auto_1fr] items-center gap-4 p-4"
+              >
+                <span className="bg-accent-fill text-accent-ink chamfer-sm grid size-11 place-items-center">
+                  <I size={20} aria-hidden="true" />
+                </span>
+                <span className="grid">
+                  <span className="font-display text-ink text-lg">{String(title)}</span>
+                  <span className="text-caption text-ink-muted">{String(text)}</span>
+                </span>
+              </div>
+            )
+          })}
+        </div>
       </section>
 
       <section className="px-4 md:px-6">

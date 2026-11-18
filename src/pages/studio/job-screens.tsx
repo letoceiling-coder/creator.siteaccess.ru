@@ -27,6 +27,7 @@ import { motions } from '@/features/jobs/motions.ts'
 import { usePlatform } from '@/features/platform/use-platform.ts'
 import { cn } from '@/shared/cn.ts'
 import { OrderBanner, TopUp } from './payment-section.tsx'
+import { InviteCard, SubscribeCard } from './reward-cards.tsx'
 
 /** Что создаём: фотосессию по сценарию или ролик по шаблону. */
 export interface CreateTarget {
@@ -820,7 +821,6 @@ export function CabinetScreen({
   })
   const [jobs, setJobs] = useState<Job[]>()
   const [history, setHistory] = useState<WalletRow[]>([])
-  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     if (session.status !== 'user') return
@@ -856,24 +856,6 @@ export function CabinetScreen({
         </StudioButton>
       </div>
     )
-  }
-
-  async function share() {
-    if (!me) return
-    const text =
-      'Фотосессии и видео с собой в главной роли — попробуй, по ссылке будут бонусные токены'
-    try {
-      if (await platform.adapter.share(text, me.referralUrl)) return
-      if (navigator.share) {
-        await navigator.share({ title: 'AI Creative Studio', text, url: me.referralUrl })
-        return
-      }
-      await navigator.clipboard.writeText(me.referralUrl)
-      setCopied(true)
-      window.setTimeout(() => setCopied(false), 2000)
-    } catch {
-      // пользователь закрыл окно «Поделиться»
-    }
   }
 
   return (
@@ -921,19 +903,9 @@ export function CabinetScreen({
       </section>
 
       <section className="grid gap-3">
-        <Label>Пригласить друга</Label>
-        <p className="text-body text-ink-muted">
-          Друг получит {me.bonuses.invitee} токенов при регистрации, а вы — {me.bonuses.referrer},
-          когда он создаст первую работу.
-        </p>
-        <div className="flex min-w-0 flex-wrap gap-2">
-          <code className="chamfer-sm bg-canvas-sunken text-ink min-h-11 min-w-0 flex-1 basis-48 truncate px-4 py-3 text-sm">
-            {me.referralUrl}
-          </code>
-          <StudioButton variant="outline" onClick={() => void share()}>
-            {copied ? 'Скопировано' : 'Поделиться'}
-          </StudioButton>
-        </div>
+        <Label>Бонусы</Label>
+        <InviteCard />
+        <SubscribeCard />
       </section>
 
       <TopUp />

@@ -80,7 +80,9 @@ const fakeServer = createServer(async (req, res) => {
           })
         : reply({ ok: false, description: 'Bad Request: chat not found' })
     if (method === 'getChatMember')
-      return reply({ ok: true, result: { status: 'administrator', can_post_messages: true } })
+      return String(body.user_id) === '99'
+        ? reply({ ok: true, result: { status: 'administrator', can_post_messages: true } })
+        : reply({ ok: true, result: { status: fake.tgMember ?? 'left' } })
     const id = 100 + fake.tg.length
     if (method === 'sendMediaGroup')
       return reply({
@@ -973,4 +975,82 @@ test('агент публикаций: бесплатные модели OpenRou
   ])
   assert.match(fallback.model, /^ollama:/)
   assert.match(fallback.text, /^Утро в цветах/)
+})
+
+test('бонус за подписку на канал: проверка через бота, один раз на аккаунт мессенджера', async () => {
+  const guest = await client()('/api/rewards')
+  assert.equal(guest.data.amount, 100)
+  const ch = guest.data.channels.find((c) => c.id === 'telegram:-100500')
+  assert.deepEqual(ch, {
+    id: 'telegram:-100500',
+    platform: 'telegram',
+    title: 'Studio',
+    url: 'https://t.me/neeklo_ai',
+    claimed: false,
+  })
+  assert.equal(
+    (await client()('/api/rewards/subscribe', { method: 'POST', json: { channelId: ch.id } }))
+      .status,
+    401,
+  )
+
+  // Без входа через Telegram подписку не проверить.
+  const { call: emailUser } = await newUser()
+  const noTg = await emailUser('/api/rewards/subscribe', {
+    method: 'POST',
+    json: { channelId: ch.id },
+  })
+  assert.equal(noTg.status, 400)
+  assert.match(noTg.data.error, /войдите через Telegram/)
+
+  // Вход из мини-приложения Telegram (подпись как у Telegram).
+  const tgLogin = async (id) => {
+    const params = new URLSearchParams({
+      auth_date: String(Math.floor(Date.now() / 1000)),
+      user: JSON.stringify({ id, first_name: 'Подписчик' }),
+    })
+    const check = [...params.entries()]
+      .sort(([x], [y]) => (x < y ? -1 : 1))
+      .map(([k, v]) => `${k}=${v}`)
+      .join('\n')
+    const secret = createHmac('sha256', 'WebAppData').update('123456:SECRET-TOKEN-abcd').digest()
+    params.set('hash', createHmac('sha256', secret).update(check).digest('hex'))
+    const call = client()
+    const res = await call('/api/auth/webapp', {
+      method: 'POST',
+      json: { platform: 'telegram', initData: params.toString() },
+    })
+    assert.equal(res.status, 200, JSON.stringify(res.data))
+    return call
+  }
+  const fan = await tgLogin(888)
+  assert.equal((await fan('/api/rewards')).data.linked.telegram, true)
+  const before = (await fan('/api/me')).data.user.balance
+
+  fake.tgMember = 'left'
+  const notYet = await fan('/api/rewards/subscribe', { method: 'POST', json: { channelId: ch.id } })
+  assert.equal(notYet.status, 400)
+  assert.match(notYet.data.error, /Подписка не найдена/)
+  // Повторная проверка — не чаще раза в 5 секунд.
+  assert.equal(
+    (await fan('/api/rewards/subscribe', { method: 'POST', json: { channelId: ch.id } })).status,
+    429,
+  )
+
+  await new Promise((r) => setTimeout(r, 5_100))
+  fake.tgMember = 'member'
+  const ok = await fan('/api/rewards/subscribe', { method: 'POST', json: { channelId: ch.id } })
+  assert.equal(ok.status, 200, JSON.stringify(ok.data))
+  assert.equal(ok.data.credited, 100)
+  assert.equal(ok.data.channels.find((c) => c.id === ch.id).claimed, true)
+  assert.equal((await fan('/api/me')).data.user.balance, before + 100)
+  const history = (await fan('/api/wallet')).data.history
+  assert.equal(history[0].reason, 'subscribe')
+
+  await new Promise((r) => setTimeout(r, 5_100))
+  assert.equal(
+    (await fan('/api/rewards/subscribe', { method: 'POST', json: { channelId: ch.id } })).status,
+    409,
+  )
+  fake.tgMember = undefined
 })

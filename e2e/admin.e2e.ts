@@ -144,7 +144,7 @@ test.describe('admin publications', () => {
     await page.goto('/telegram/cabinet', { waitUntil: 'domcontentloaded' })
     await expect(page.getByRole('heading', { name: 'Тест' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Выйти' })).toHaveCount(0)
-    await page.getByRole('button', { name: 'Поделиться' }).click()
+    await page.getByRole('button', { name: 'Пригласить друзей' }).click()
     const opened = await page.evaluate(() => (window as unknown as { __opened: string[] }).__opened)
     expect(opened).toHaveLength(1)
     expect(opened[0]).toMatch(
@@ -258,5 +258,52 @@ test.describe('admin publications', () => {
     await page.getByRole('button', { name: 'Опубликовать', exact: true }).click()
     await expect(page.getByText('Публикуется', { exact: false })).toBeVisible()
     expect(published).toBe(true)
+  })
+
+  test('home: subscribe bonus and invite cards', async ({ page }) => {
+    let balance = 30
+    await page.route('**/api/me', (route) =>
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ ...me('user'), user: { ...me('user').user, balance } }),
+      }),
+    )
+    let claimed = false
+    const rewards = () => ({
+      amount: 100,
+      invitee: 10,
+      referrer: 20,
+      channels: [
+        {
+          id: 'telegram:-100500',
+          platform: 'telegram',
+          title: 'Studio',
+          url: 'https://t.me/neeklo_ai',
+          claimed,
+        },
+      ],
+      linked: { telegram: true, max: false },
+    })
+    await page.route('**/api/rewards', (route) =>
+      route.fulfill({ contentType: 'application/json', body: JSON.stringify(rewards()) }),
+    )
+    await page.route('**/api/rewards/subscribe', async (route) => {
+      claimed = true
+      balance = 130
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ ...rewards(), credited: 100 }),
+      })
+    })
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
+    await expect(
+      page.getByRole('heading', { name: /Подпишитесь на канал — 100 токенов/ }),
+    ).toBeVisible()
+    await expect(page.getByRole('heading', { name: /Делитесь ссылкой/ })).toBeVisible()
+    await expect(page.getByText('https://creator.siteaccess.ru/?ref=abc1234').first()).toBeVisible()
+    await noOverflow(page)
+    await page.getByRole('button', { name: 'Я подписался' }).first().click()
+    await expect(page.getByText('Готово! +100 токенов на балансе').first()).toBeVisible()
+    await expect(page.getByText('Бонус уже получен', { exact: false }).first()).toBeVisible()
   })
 })

@@ -152,6 +152,7 @@ export function adminRoutes({ accounts, db, q, log, payments, bots, channels, au
           daily: int(b.daily, 0, 100_000, 'бесплатно в сутки'),
           referrer: int(b.referrer, 0, 100_000, 'награда за друга'),
           invitee: int(b.invitee, 0, 100_000, 'бонус приглашённому'),
+          subscribe: int(b.subscribe ?? 100, 0, 100_000, 'бонус за подписку на канал'),
         })
         log(`админ ${user.id.slice(0, 8)}: изменены цены и бонусы`)
         return send(res, 200, {

@@ -81,6 +81,15 @@ export function channelsModule({ db, accounts, config, log }) {
       status TEXT NOT NULL,
       created_at INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS channel_rewards (
+      user_id TEXT NOT NULL,
+      channel_id TEXT NOT NULL,
+      platform_user TEXT NOT NULL,
+      amount INTEGER NOT NULL,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (user_id, channel_id),
+      UNIQUE (channel_id, platform_user)
+    );
   `)
   const st = {
     upsert:
@@ -96,7 +105,14 @@ export function channelsModule({ db, accounts, config, log }) {
     ),
     finishPost: db.prepare('UPDATE posts SET results = ?, status = ? WHERE id = ?'),
     posts: db.prepare('SELECT * FROM posts ORDER BY created_at DESC LIMIT 50'),
+    identity: db.prepare('SELECT provider_id FROM identities WHERE user_id = ? AND provider = ?'),
+    claimed: db.prepare('SELECT channel_id FROM channel_rewards WHERE user_id = ?'),
+    claim: db.prepare(
+      'INSERT OR IGNORE INTO channel_rewards (user_id, channel_id, platform_user, amount, created_at) VALUES (?, ?, ?, ?, ?)',
+    ),
   }
+  /** Последняя проверка подписки по пользователю: не чаще раза в 5 секунд. */
+  const lastCheck = new Map()
 
   const integrations = () => accounts.getSetting('integrations')
   const workDir = join(config.dataDir, 'posts')
@@ -412,9 +428,107 @@ export function channelsModule({ db, accounts, config, log }) {
     canPost: Boolean(c.can_post),
   })
 
+  /* ── бонус за подписку на канал ── */
+
+  /** Публичная ссылка на канал, если она известна. */
+  function channelUrl(c) {
+    if (c.platform === 'telegram') return c.username ? `https://t.me/${c.username}` : undefined
+    return c.username && /^https:\/\/max\.ru\//.test(c.username) ? c.username : undefined
+  }
+
+  /** Подписан ли пользователь мессенджера на канал (бот — администратор канала). */
+  async function isMember(c, platformUser) {
+    if (c.platform === 'telegram') {
+      try {
+        const m = await tg('getChatMember', { chat_id: c.chat_id, user_id: platformUser })
+        return (
+          ['creator', 'administrator', 'member'].includes(m.status) ||
+          (m.status === 'restricted' && m.is_member === true)
+        )
+      } catch (error) {
+        if (/user not found|participant/i.test(error.message)) return false
+        throw error
+      }
+    }
+    const res = await max(
+      'GET',
+      `/chats/${encodeURIComponent(c.chat_id)}/members?user_ids=${encodeURIComponent(platformUser)}`,
+    )
+    return (res.members ?? []).length > 0
+  }
+
+  function rewardsView(user) {
+    const bonuses = accounts.getSetting('bonuses')
+    const claimed = new Set(user ? st.claimed.all(user.id).map((r) => r.channel_id) : [])
+    return {
+      amount: bonuses.subscribe ?? 0,
+      invitee: bonuses.invitee,
+      referrer: bonuses.referrer,
+      channels: st.list
+        .all()
+        .filter((c) => c.can_post && channelUrl(c))
+        .map((c) => ({
+          id: c.id,
+          platform: c.platform,
+          title: c.title,
+          url: channelUrl(c),
+          claimed: claimed.has(c.id),
+        })),
+      linked: {
+        telegram: Boolean(user && st.identity.get(user.id, 'telegram')),
+        max: Boolean(user && st.identity.get(user.id, 'max')),
+      },
+    }
+  }
+
+  async function handleRewards(req, res, path, user) {
+    if (req.method === 'GET' && path === '/api/rewards') return send(res, 200, rewardsView(user))
+    if (req.method === 'POST' && path === '/api/rewards/subscribe') {
+      if (!user) throw new HttpError(401, 'Войдите в аккаунт, чтобы получить бонус')
+      const body = await readJson(req)
+      const c = st.get.get(String(body.channelId ?? ''))
+      if (!c || !c.can_post || !channelUrl(c)) throw new HttpError(404, 'Канал не найден')
+      const amount = accounts.getSetting('bonuses').subscribe ?? 0
+      if (amount <= 0) throw new HttpError(400, 'Бонус за подписку сейчас выключен')
+      if (st.claimed.all(user.id).some((r) => r.channel_id === c.id))
+        throw new HttpError(409, 'Бонус за этот канал уже получен')
+      const name = c.platform === 'telegram' ? 'Telegram' : 'MAX'
+      const identity = st.identity.get(user.id, c.platform)
+      if (!identity)
+        throw new HttpError(
+          400,
+          `Чтобы проверить подписку, войдите через ${name} — так мы узнаем ваш аккаунт в мессенджере`,
+        )
+      const prev = lastCheck.get(user.id) ?? 0
+      if (Date.now() - prev < 5_000) throw new HttpError(429, 'Подождите несколько секунд')
+      lastCheck.set(user.id, Date.now())
+      let member
+      try {
+        member = await isMember(c, identity.provider_id)
+      } catch (error) {
+        log(`подписка ${c.id}: ${error.message}`)
+        throw new HttpError(502, 'Не получилось проверить подписку, попробуйте через минуту')
+      }
+      if (!member)
+        throw new HttpError(
+          400,
+          `Подписка не найдена. Подпишитесь на «${c.title}» в ${name} и нажмите «Проверить» ещё раз`,
+        )
+      // Один аккаунт мессенджера — один бонус за канал, даже если на сайте несколько аккаунтов.
+      const ok =
+        st.claim.run(user.id, c.id, String(identity.provider_id), amount, Date.now()).changes === 1
+      if (!ok) throw new HttpError(409, `Этот аккаунт ${name} уже получил бонус за канал`)
+      accounts.change(user.id, amount, 'subscribe', `Подписка на канал «${c.title}»`, c.id)
+      log(`подписка: +${amount} пользователю ${user.id.slice(0, 8)} за ${c.id}`)
+      return send(res, 200, { ...rewardsView(user), credited: amount })
+    }
+    throw new HttpError(404, 'Не найдено')
+  }
+
   return {
     limits,
     publishPost,
+    handleRewards,
     targetsFor,
     validate,
     channels: () => st.list.all().map(view),

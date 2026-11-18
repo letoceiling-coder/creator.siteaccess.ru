@@ -10,7 +10,7 @@ const id = () => randomBytes(12).toString('hex')
 /** Значения по умолчанию; администратор меняет их в админке. */
 export const defaults = {
   prices: { photo: 10, video: 30, animate5: 8, animate10: 15 },
-  bonuses: { signup: 30, daily: 10, referrer: 20, invitee: 10 },
+  bonuses: { signup: 30, daily: 10, referrer: 20, invitee: 10, subscribe: 100 },
   integrations: {
     yandex: { enabled: false, clientId: '', clientSecret: '' },
     vk: { enabled: false, clientId: '', clientSecret: '' },

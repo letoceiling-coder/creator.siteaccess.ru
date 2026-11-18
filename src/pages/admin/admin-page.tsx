@@ -422,7 +422,7 @@ function Tariffs() {
 
 interface Settings {
   prices: { photo: number; video: number; animate5: number; animate10: number }
-  bonuses: { signup: number; daily: number; referrer: number; invitee: number }
+  bonuses: { signup: number; daily: number; referrer: number; invitee: number; subscribe: number }
 }
 
 function Pricing() {
@@ -480,6 +480,12 @@ function Pricing() {
             'referrer',
             'Пригласившему',
             'Когда друг создаст первую работу — защита от накрутки',
+          )}
+          {field(
+            'bonuses',
+            'subscribe',
+            'За подписку на канал',
+            'Один раз за каждый канал; подписка проверяется через бота',
           )}
         </div>
       </div>

@@ -23,11 +23,14 @@ export interface TelegramHost {
   platform?: string
   initData?: string
   openTelegramLink?: (url: string) => void
+  openLink?: (url: string) => void
 }
 
 export interface MaxHost {
   ready: () => void
   close: () => void
+  openLink?: (url: string) => void
+  openMaxLink?: (url: string) => void
   shareMaxContent?: (params: {
     text?: string
     link?: string
@@ -80,4 +83,6 @@ export interface PlatformAdapter {
    * false — у хоста такого способа нет, нужен запасной путь браузера.
    */
   share: (text: string, url: string) => Promise<boolean>
+  /** Открыть ссылку: ссылки мессенджера — внутри него, остальные — во внешнем браузере. */
+  openLink: (url: string) => void
 }
