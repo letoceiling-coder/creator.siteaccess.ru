@@ -3,22 +3,24 @@ import { ApiError, apiFetch, parse } from '@/features/auth/http.ts'
 
 export { ApiError }
 
-export type JobKind = 'photo' | 'video' | 'animate'
+export type JobKind = 'photo' | 'video' | 'animate' | 'song'
 export type TimeOfDay = 'day' | 'dusk' | 'night'
 
 const resultSchema = z.object({
-  type: z.enum(['photo', 'video']),
+  type: z.enum(['photo', 'video', 'audio']),
   src: z.string(),
   download: z.string(),
   poster: z.string().optional(),
   label: z.string().optional(),
+  /** Текст песни. */
+  text: z.string().optional(),
   width: z.number(),
   height: z.number(),
 })
 
 const jobSchema = z.object({
   id: z.string(),
-  kind: z.enum(['photo', 'video', 'animate']),
+  kind: z.enum(['photo', 'video', 'animate', 'song']),
   target: z.string(),
   status: z.enum(['queued', 'running', 'done', 'failed', 'cancelled', 'expired']),
   done: z.number(),
@@ -62,6 +64,14 @@ export async function createJob(input: CreateJobInput) {
   if (input.duration) form.append('duration', String(input.duration))
   form.append('consent', 'yes')
   for (const photo of input.photos) form.append('photos', photo, photo.name)
+  return parse(await apiFetch('/api/jobs', { method: 'POST', body: form }), createdSchema)
+}
+
+/** Песня по согласованному сюжету: фото не нужны. */
+export async function createSongJob(target: string) {
+  const form = new FormData()
+  form.append('kind', 'song')
+  form.append('target', target)
   return parse(await apiFetch('/api/jobs', { method: 'POST', body: form }), createdSchema)
 }
 

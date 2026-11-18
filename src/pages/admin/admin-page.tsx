@@ -422,7 +422,7 @@ function Tariffs() {
 /* ── цены и бонусы ── */
 
 interface Settings {
-  prices: { photo: number; video: number; animate5: number; animate10: number }
+  prices: { photo: number; video: number; animate5: number; animate10: number; song: number }
   bonuses: { signup: number; daily: number; referrer: number; invitee: number; subscribe: number }
 }
 
@@ -465,6 +465,7 @@ function Pricing() {
           {field('prices', 'video', 'Видеосюжет (≈19 с)')}
           {field('prices', 'animate5', 'Оживление фото, 5 с')}
           {field('prices', 'animate10', 'Оживление фото, 10 с')}
+          {field('prices', 'song', 'Песня (свой сюжет, ≈2 мин)')}
         </div>
         <div className="grid gap-3">
           <h3 className="text-ink font-medium">Бонусы</h3>

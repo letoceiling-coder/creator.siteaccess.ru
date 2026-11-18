@@ -6,6 +6,8 @@ import {
   CabinetPage,
   CatalogPage,
   CreatePage,
+  CustomCreatePage,
+  CustomPage,
   HomePage,
   JobPage,
   LoginPage,
@@ -40,6 +42,9 @@ const tails = [
   ['/video/:id', VideoItemPage],
   ['/video/:id/create', VideoCreatePage],
   ['/cabinet', CabinetPage],
+  ['/custom', CustomPage],
+  ['/custom/:id', CustomPage],
+  ['/custom/:id/create', CustomCreatePage],
   ['/login', LoginPage],
 ] as const
 

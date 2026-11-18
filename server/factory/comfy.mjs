@@ -159,7 +159,16 @@ export async function download(file) {
 }
 
 /** ACE-Step 1.5 XL Turbo: инструментальный трек по описанию, темпу и тональности. */
-export function aceMusicWorkflow({ tags, bpm, seconds, keyscale, seed, prefix }) {
+export function aceMusicWorkflow({
+  tags,
+  bpm,
+  seconds,
+  keyscale,
+  seed,
+  prefix,
+  lyrics = '[Instrumental]',
+  language = 'en',
+}) {
   return {
     1: {
       class_type: 'UNETLoader',
@@ -181,12 +190,12 @@ export function aceMusicWorkflow({ tags, bpm, seconds, keyscale, seed, prefix })
       inputs: {
         clip: ['2', 0],
         tags,
-        lyrics: '[Instrumental]',
+        lyrics,
         seed,
         bpm,
         duration: seconds,
         timesignature: '4',
-        language: 'en',
+        language,
         keyscale,
         generate_audio_codes: true,
         cfg_scale: 2,

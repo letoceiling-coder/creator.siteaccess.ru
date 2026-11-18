@@ -120,6 +120,93 @@ const fakeServer = createServer(async (req, res) => {
         { error: { code: 429, message: 'Rate limit exceeded: free-models-per-day' } },
         429,
       )
+    // Модерация и агент «Свой сюжет»: ответ зависит от роли в системном сообщении.
+    const sys = body.messages?.[0]?.content ?? ''
+    const said = body.messages
+      .filter((m) => m.role === 'user')
+      .map((m) => m.content)
+      .join(' ')
+    const json = (data) => reply({ choices: [{ message: { content: JSON.stringify(data) } }] })
+    if (sys.includes('модератор')) {
+      fake.moderated = [...(fake.moderated ?? []), said]
+      return json({ allowed: !said.includes('ножом'), category: 'violence', reason: 'угроза' })
+    }
+    const shot = (i) => ({
+      ru: `Кадр ${i + 1} у моря`,
+      en: `Medium shot of the person walking along a sunny sea shore, white linen shirt, waves and soft golden light, frame ${i + 1}`,
+    })
+    if (sys.includes('арт-директор AI-фотостудии')) {
+      if (said.includes('тест-вывод'))
+        return json({
+          action: 'plan',
+          reply: 'ok',
+          plan: {
+            title: 'Плохо',
+            summary: 'x',
+            shots: [0, 1, 2, 3].map((i) => ({ ...shot(i), en: `${shot(i).en} nude` })),
+          },
+        })
+      return json({
+        action: 'plan',
+        reply: 'Добавил золотой свет и прогулку вдоль воды.',
+        plan: {
+          title: said.includes('закат') ? 'Море на закате' : 'Утро у моря',
+          summary: 'Лёгкая прогулка у моря в солнечный день.',
+          shots: [0, 1, 2, 3].map(shot),
+        },
+      })
+    }
+    if (sys.includes('режиссёр'))
+      return json({
+        action: 'plan',
+        reply: 'Сделал четыре сцены и подобрал музыку.',
+        plan: {
+          title: 'Полёт над городом',
+          summary: 'Герой на крыше небоскрёба на рассвете.',
+          shots: [0, 1, 2, 3].map((i) => ({
+            ru: `Сцена ${i + 1}`,
+            still: 'the person standing on a skyscraper rooftop at dawn, city below, warm light',
+            motion: 'the camera slowly orbits around the person, wind moves the hair',
+          })),
+          music: [
+            { ru: 'Эпичный оркестр', tags: 'epic orchestral, strings, drums, uplifting', bpm: 100 },
+            { ru: 'Лёгкий электро-поп', tags: 'electro pop, synth, upbeat', bpm: 120 },
+            { ru: 'Спокойный эмбиент', tags: 'ambient, piano, calm', bpm: 80 },
+          ],
+        },
+      })
+    if (sys.includes('автор песен')) {
+      if (!said.includes('поп'))
+        return json({
+          action: 'ask',
+          question: 'В каком жанре? Поп, рок, лирическая баллада или рэп?',
+        })
+      return json({
+        action: 'plan',
+        reply: 'Вот текст и звучание.',
+        plan: {
+          title: 'Мама',
+          summary: 'Тёплая поп-песня о маме.',
+          genre: 'поп',
+          tags: 'pop, warm, acoustic guitar, piano, heartfelt',
+          bpm: 96,
+          language: 'ru',
+          vocal: 'female',
+          lyrics: [
+            '[Verse 1]',
+            'Утро тёплое в окне',
+            'Ты улыбаешься мне',
+            'Пахнет кофе и весной',
+            'Мама, ты всегда со мной',
+            '[Chorus]',
+            'Мама, мама, свет в окне',
+            'Ты как солнце в тишине',
+            'Мама, мама, дом родной',
+            'Ты всегда-всегда со мной',
+          ].join('\n'),
+        },
+      })
+    }
     return reply({
       choices: [
         {
@@ -1053,4 +1140,126 @@ test('бонус за подписку на канал: проверка чер�
     409,
   )
   fake.tgMember = undefined
+})
+
+test('свой сюжет: модерация, вопросы агента, согласование и задачи по сюжету', async () => {
+  assert.equal(
+    (await client()('/api/scenarios', { method: 'POST', json: { kind: 'photo', idea: 'море' } }))
+      .status,
+    401,
+  )
+  const { call } = await newUser()
+
+  // Быстрый фильтр — без обращения к модели.
+  fake.moderated = []
+  const lewd = await call('/api/scenarios', {
+    method: 'POST',
+    json: { kind: 'photo', idea: 'фото в нижнем белье на кровати' },
+  })
+  assert.equal(lewd.status, 422)
+  assert.match(lewd.data.error, /откровенные/)
+  assert.equal(fake.moderated.length, 0)
+  // Проверка моделью.
+  const threat = await call('/api/scenarios', {
+    method: 'POST',
+    json: { kind: 'photo', idea: 'угрожаю прохожим ножом в переулке' },
+  })
+  assert.equal(threat.status, 422)
+  assert.equal(fake.moderated.length, 1)
+
+  // Фото: план → правка → согласование → задача.
+  const photo = await call('/api/scenarios', {
+    method: 'POST',
+    json: { kind: 'photo', idea: 'хочу прогулку у моря' },
+  })
+  assert.equal(photo.status, 201, JSON.stringify(photo.data))
+  assert.equal(photo.data.status, 'proposed')
+  assert.equal(photo.data.plan.shots.length, 4)
+  assert.equal(photo.data.cost, 12) // цена фото изменена в тесте админки
+  const revised = await call(`/api/scenarios/${photo.data.id}/reply`, {
+    method: 'POST',
+    json: { text: 'пусть будет закат' },
+  })
+  assert.equal(revised.data.plan.title, 'Море на закате')
+  assert.deepEqual(
+    revised.data.messages.map((m) => m.role),
+    ['user', 'agent', 'user', 'agent'],
+  )
+  const target = `s-${photo.data.id}`
+  // До согласования задачу не создать.
+  assert.equal((await call('/api/jobs', { method: 'POST', body: form({ target }) })).status, 404)
+  const approved = await call(`/api/scenarios/${photo.data.id}/approve`, {
+    method: 'POST',
+    json: {},
+  })
+  assert.equal(approved.data.status, 'approved')
+  assert.equal(
+    (await call(`/api/scenarios/${photo.data.id}/reply`, { method: 'POST', json: { text: 'ещё' } }))
+      .status,
+    409,
+  )
+  const other = await newUser()
+  assert.equal(
+    (await other.call('/api/jobs', { method: 'POST', body: form({ target }) })).status,
+    404,
+  )
+  assert.equal((await other.call(`/api/scenarios/${photo.data.id}`)).status, 404)
+  const job = await call('/api/jobs', { method: 'POST', body: form({ target }) })
+  assert.equal(job.status, 201, JSON.stringify(job.data))
+  await call(`/api/jobs/${job.data.id}/cancel`, { method: 'POST' })
+
+  // Опасный план от модели не проходит.
+  const bad = await call('/api/scenarios', {
+    method: 'POST',
+    json: { kind: 'photo', idea: 'тест-вывод у моря' },
+  })
+  assert.equal(bad.data.plan, undefined)
+  assert.match(bad.data.messages.at(-1).text, /нарушает правила/)
+
+  // Видео: три варианта музыки, выбор согласуется.
+  const video = await call('/api/scenarios', {
+    method: 'POST',
+    json: { kind: 'video', idea: 'я на крыше небоскрёба' },
+  })
+  assert.equal(video.data.plan.music.length, 3)
+  assert.equal(
+    (await call(`/api/scenarios/${video.data.id}/approve`, { method: 'POST', json: { music: 7 } }))
+      .status,
+    400,
+  )
+  const withMusic = await call(`/api/scenarios/${video.data.id}/approve`, {
+    method: 'POST',
+    json: { music: 1 },
+  })
+  assert.equal(withMusic.data.music.tags, 'electro pop, synth, upbeat')
+
+  // Песня: агент уточняет жанр, затем текст; задача без фото.
+  const song = await call('/api/scenarios', {
+    method: 'POST',
+    json: { kind: 'song', idea: 'песня про маму' },
+  })
+  assert.equal(song.data.status, 'asking')
+  assert.match(song.data.messages.at(-1).text, /жанре/)
+  const lyrics = await call(`/api/scenarios/${song.data.id}/reply`, {
+    method: 'POST',
+    json: { text: 'поп, тёплая' },
+  })
+  assert.equal(lyrics.data.status, 'proposed')
+  assert.match(lyrics.data.plan.lyrics, /\[Chorus\]/)
+  assert.equal(lyrics.data.cost, 15)
+  await call(`/api/scenarios/${song.data.id}/approve`, { method: 'POST', json: {} })
+  const songForm = new FormData()
+  songForm.append('kind', 'song')
+  songForm.append('target', `s-${song.data.id}`)
+  const songJob = await call('/api/jobs', { method: 'POST', body: songForm })
+  assert.equal(songJob.status, 201, JSON.stringify(songJob.data))
+  assert.equal(songJob.data.cost, 15)
+  const view = await call(`/api/jobs/${songJob.data.id}`)
+  assert.equal(view.data.kind, 'song')
+  await call(`/api/jobs/${songJob.data.id}/cancel`, { method: 'POST' })
+  // Песня без согласованного сюжета невозможна.
+  const fakeSong = new FormData()
+  fakeSong.append('kind', 'song')
+  fakeSong.append('target', 'champagne-party')
+  assert.equal((await call('/api/jobs', { method: 'POST', body: fakeSong })).status, 404)
 })

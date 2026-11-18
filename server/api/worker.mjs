@@ -16,6 +16,7 @@ import { join } from 'node:path'
 import { promisify } from 'node:util'
 import {
   download,
+  aceMusicWorkflow,
   qwenEditWorkflow,
   runWorkflow,
   uploadImage,
@@ -297,12 +298,72 @@ export function startWorker({ q, config, log, onFinish = () => {} }) {
     }
     checkCancel(job.id)
 
-    const music = join(config.mediaDir, 'music', `${job.target}.mp3`)
+    // Свой сюжет: музыка по согласованному описанию (или без музыки); шаблон — готовый трек.
+    let music = join(config.mediaDir, 'music', `${job.target}.mp3`)
+    if (plan.custom) {
+      music = plan.music
+        ? await makeMusic(job, plan.music, join(out, 'music.mp3'), clips.length * 5 + 2)
+        : ''
+      if (plan.music) q.progress.run(++step, '[]', job.id)
+    }
     const { total } = await assembleShots(clips, music, join(out, 'video.mp4'))
+    if (plan.custom && music) rmSync(music, { force: true })
     for (const c of clips) rmSync(c)
     const first = plan.shots[0].video
     const results = videoResult(job, first.width, first.height, `${Math.round(total)} с`)
     q.progress.run(++step, JSON.stringify(results), job.id)
+    return results
+  }
+
+  /** Инструментальная музыка ACE-Step по описанию (свой видеосюжет). */
+  async function makeMusic(job, music, file, seconds) {
+    const files = await withRetry(() =>
+      runWorkflow(
+        aceMusicWorkflow({
+          tags: `${music.tags}, instrumental, no vocals`,
+          bpm: music.bpm,
+          seconds,
+          keyscale: 'C major',
+          seed: 4242,
+          prefix: `creator-user/${job.id}-music`,
+        }),
+        { front: true, timeoutMs: 600_000 },
+      ),
+    )
+    writeFileSync(file, await download(files[0]))
+    return file
+  }
+
+  /** Песня с вокалом: текст и звучание согласованы с агентом. */
+  async function songJob(job, plan, out) {
+    const files = await withRetry(() =>
+      runWorkflow(
+        aceMusicWorkflow({
+          tags: `${plan.tags}, ${plan.vocal === 'male' ? 'male vocals' : 'female vocals'}, clear vocals, professional mix`,
+          lyrics: plan.lyrics,
+          language: plan.language,
+          bpm: plan.bpm,
+          seconds: plan.seconds,
+          keyscale: 'C major',
+          seed: Number.parseInt(job.id.slice(0, 6), 16),
+          prefix: `creator-user/${job.id}-song`,
+        }),
+        { front: true, timeoutMs: 900_000 },
+      ),
+    )
+    writeFileSync(join(out, 'song.mp3'), await download(files[0]))
+    const results = [
+      {
+        type: 'audio',
+        src: `/media/jobs/${job.id}/song.mp3`,
+        download: `/media/jobs/${job.id}/song.mp3`,
+        label: plan.title,
+        text: plan.lyrics,
+        width: 0,
+        height: 0,
+      },
+    ]
+    q.progress.run(1, JSON.stringify(results), job.id)
     return results
   }
 
@@ -374,7 +435,14 @@ export function startWorker({ q, config, log, onFinish = () => {} }) {
     try {
       const plan = planFor(job.kind, job.target, JSON.parse(job.options))
       if (!plan) throw new Error('План задачи не найден')
-      const make = job.kind === 'video' ? videoJob : job.kind === 'animate' ? animateJob : photoJob
+      const make =
+        job.kind === 'video'
+          ? videoJob
+          : job.kind === 'animate'
+            ? animateJob
+            : job.kind === 'song'
+              ? songJob
+              : photoJob
       const results = await make(job, plan, out)
       q.finish.run('done', null, now(), JSON.stringify(results), job.id)
       safeFinish(job, 'done')

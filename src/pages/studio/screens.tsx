@@ -11,6 +11,7 @@ import { useMedia } from '@/features/media/use-media.ts'
 import { usePaged } from '@/hooks/use-paged.ts'
 import { StudioButton } from '@/components/studio/studio-button.tsx'
 import { heroDeck, scenarios, type Scenario } from '@/features/catalog/data.ts'
+import { CustomCta } from './custom-screens.tsx'
 import { InviteCard, SubscribeCard } from './reward-cards.tsx'
 
 const enter = { duration: 0.36, ease: [0.22, 1, 0.36, 1] as const }
@@ -211,6 +212,8 @@ export function HomeScreen({
         </section>
       ) : null}
 
+      <CustomCta />
+
       <section className="grid gap-5 px-4 md:px-6">
         <div>
           <Label>Бонусы</Label>
@@ -333,6 +336,7 @@ export function CatalogScreen({ onOpen }: { onOpen: (id: string) => void }) {
         step={12}
         onMore={page.more}
       />
+      <CustomCta className="mt-4 px-0 md:px-0" />
     </div>
   )
 }

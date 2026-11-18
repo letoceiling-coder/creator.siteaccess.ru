@@ -16,6 +16,7 @@ import { videoTemplates } from '@/features/catalog/video-data.ts'
 import { useMedia } from '@/features/media/use-media.ts'
 import { usePaged } from '@/hooks/use-paged.ts'
 import { MoreButton } from '@/components/studio/more-button.tsx'
+import { CustomCta } from './custom-screens.tsx'
 import { cn } from '@/shared/cn.ts'
 
 function Label({ children }: { children: string }) {
@@ -110,6 +111,7 @@ export function VideoCatalogScreen({
         step={10}
         onMore={page.more}
       />
+      <CustomCta className="mt-4 px-0 md:px-0" />
     </div>
   )
 }

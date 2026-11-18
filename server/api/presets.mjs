@@ -132,7 +132,59 @@ export function animatePlan(target, options) {
   }
 }
 
+/** Свои сюжеты (scenarios.mjs): загрузчик согласованного плана подключает сервер. */
+let loadCustom = () => undefined
+export function setCustomLoader(fn) {
+  loadCustom = fn
+}
+export const isCustom = (target) => /^s-[0-9a-f]{16}$/.test(target)
+
+/**
+ * План по сюжету пользователя. Описание сцены пишет агент (уже проверенное модерацией),
+ * а правила студии — лицо, сходство, одежда по полу, стиль — добавляются здесь всегда.
+ */
+function customPlan(kind, target) {
+  const sc = loadCustom(target.slice(2))
+  if (!sc || sc.kind !== kind) return undefined
+  if (kind === 'photo')
+    return sc.plan.shots.map((shot, i) => ({
+      type: 'photo',
+      name: `Кадр ${i + 1}`,
+      width: 1104,
+      height: 1472,
+      seed: 70_000 + i * 97,
+      prompt: `${shot.en}. Subject: the person from the reference photos. ${faceVisible} ${identity} ${camera}.`,
+    }))
+  if (kind === 'video') {
+    const sz = sizes['9:16']
+    return {
+      template: { id: target, title: sc.plan.title },
+      people: 1,
+      custom: true,
+      music: sc.music ?? null,
+      shots: sc.plan.shots.map((shot, i) => ({
+        name: `Сцена ${i + 1}`,
+        still: {
+          width: sz.still[0],
+          height: sz.still[1],
+          seed: 81_000 + i * 131,
+          prompt: `Cinematic film still: ${shot.still}. Subject: the person from the reference photos. ${faceVisible} ${identity} ${style}`,
+        },
+        video: {
+          width: sz.video[0],
+          height: sz.video[1],
+          seed: 82_000 + i * 17,
+          prompt: `${shot.motion}, cinematic, natural realistic motion, the face stays visible, consistent and inside the frame, the person keeps exactly the same face and identity throughout the whole clip, no face morphing`,
+        },
+      })),
+    }
+  }
+  if (kind === 'song') return { ...sc.plan, seconds: 120 }
+  return undefined
+}
+
 export function planFor(kind, target, options) {
+  if (isCustom(target)) return customPlan(kind, target)
   if (kind === 'video') return videoPlan(target, options)
   if (kind === 'animate') return animatePlan(target, options)
   return photoPlan(target, options)
@@ -140,7 +192,8 @@ export function planFor(kind, target, options) {
 
 /** Шаги для прогресса: фото — кадры; видео — 3 кадра, 3 плана и склейка; оживление — клипы. */
 export function stepsFor(kind, plan) {
-  if (kind === 'video') return plan.shots.length * 2 + 1
+  if (kind === 'video') return plan.shots.length * 2 + 1 + (plan.music ? 1 : 0)
+  if (kind === 'song') return 1
   if (kind === 'animate') return plan.clips.length
   return plan.length
 }

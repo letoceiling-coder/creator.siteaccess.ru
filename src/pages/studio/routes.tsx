@@ -1,7 +1,10 @@
 import { useCallback } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
 import { Alert } from '@/components/ui/alert.tsx'
-import { scenarios } from '@/features/catalog/data.ts'
+import { heroDeck, scenarios } from '@/features/catalog/data.ts'
+import { getScenario, isCustomTarget, type Scenario } from '@/features/scenarios/api.ts'
+import { IrisLoader } from '@/components/studio/iris-loader.tsx'
+import { useEffect, useState } from 'react'
 import { findScenario } from '@/features/catalog/photo-data.ts'
 import { videoTemplates } from '@/features/catalog/video-data.ts'
 import type { JobKind } from '@/features/jobs/api.ts'
@@ -10,6 +13,7 @@ import { useMedia } from '@/features/media/use-media.ts'
 import { usePaths } from '@/features/platform/use-paths.ts'
 import { LoginScreen, TelegramCallbackScreen } from './auth-screens.tsx'
 import { CabinetScreen, JobScreen, WizardScreen, type CreateTarget } from './job-screens.tsx'
+import { CustomScreen } from './custom-screens.tsx'
 import { CatalogScreen, HomeScreen, ScenarioScreen } from './screens.tsx'
 import { VideoCatalogScreen, VideoDetailScreen } from './video-screens.tsx'
 
@@ -38,6 +42,11 @@ function Missing() {
 function useDescribe() {
   const media = useMedia()
   return (kind: JobKind, target: string) => {
+    if (isCustomTarget(target) || kind === 'song')
+      return {
+        title: kind === 'song' ? 'Ваша песня' : kind === 'video' ? 'Ваше видео' : 'Ваша фотосессия',
+        cover: heroDeck[0] ?? '',
+      }
     if (kind === 'animate') {
       const m = motions.find((x) => x.id === target)
       return {
@@ -173,6 +182,67 @@ export function AnimatePage() {
   )
 }
 
+export function CustomPage() {
+  const { id } = useParams()
+  const navigate = useNavigate()
+  const paths = usePaths()
+  const toLogin = useLoginRedirect()
+  return (
+    <CustomScreen
+      key={id ?? 'new'}
+      scenarioId={id}
+      onCreate={(s) => void navigate(paths.customCreate(s.id))}
+      onJob={(jobId) => void navigate(paths.job(jobId))}
+      onLogin={toLogin}
+    />
+  )
+}
+
+/** Загрузка фото для согласованного своего сюжета — тот же мастер, что и у шаблонов. */
+export function CustomCreatePage() {
+  const { id = '' } = useParams()
+  const navigate = useNavigate()
+  const paths = usePaths()
+  const toLogin = useLoginRedirect()
+  const [scenario, setScenario] = useState<Scenario | null>()
+  useEffect(() => {
+    getScenario(id)
+      .then(setScenario)
+      .catch(() => setScenario(null))
+  }, [id])
+  if (scenario === undefined)
+    return (
+      <div className="grid min-h-64 place-items-center">
+        <IrisLoader size={48} label="Загружаем сюжет" />
+      </div>
+    )
+  if (!scenario?.plan || scenario.status !== 'approved' || scenario.kind === 'song')
+    return <Missing />
+  const plan = scenario.plan
+  const target: CreateTarget = {
+    kind: scenario.kind,
+    id: `s-${scenario.id}`,
+    title: plan.title,
+    cover: heroDeck[0] ?? '',
+    output:
+      scenario.kind === 'video'
+        ? `ролик ≈20 секунд: четыре сцены${scenario.music ? ' и музыка' : ''}`
+        : '4 кадра',
+    eta: scenario.kind === 'video' ? 'около 10–15 минут' : 'около 3–5 минут',
+    script: 'shots' in plan ? plan.shots.map((s) => s.ru) : [],
+    custom: true,
+  }
+  return (
+    <WizardScreen
+      target={target}
+      onBack={() => void navigate(paths.customItem(scenario.id))}
+      onDone={(jobId) => void navigate(paths.job(jobId))}
+      onLogin={toLogin}
+      onWallet={() => void navigate(paths.cabinet)}
+    />
+  )
+}
+
 export function JobPage() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
@@ -186,11 +256,13 @@ export function JobPage() {
       onCabinet={() => void navigate(paths.cabinet)}
       onRetry={(kind, target) =>
         void navigate(
-          kind === 'animate'
-            ? paths.animate
-            : kind === 'video'
-              ? paths.videoCreate(target)
-              : paths.create(target),
+          isCustomTarget(target) || kind === 'song'
+            ? paths.custom
+            : kind === 'animate'
+              ? paths.animate
+              : kind === 'video'
+                ? paths.videoCreate(target)
+                : paths.create(target),
         )
       }
     />

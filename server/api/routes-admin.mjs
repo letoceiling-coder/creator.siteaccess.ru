@@ -146,6 +146,7 @@ export function adminRoutes({ accounts, db, q, log, payments, bots, channels, au
           video: int(p.video, 0, 100_000, 'цена видео'),
           animate5: int(p.animate5, 0, 100_000, 'цена оживления 5 с'),
           animate10: int(p.animate10, 0, 100_000, 'цена оживления 10 с'),
+          song: int(p.song ?? 15, 0, 100_000, 'цена песни'),
         })
         accounts.setSetting('bonuses', {
           signup: int(b.signup, 0, 100_000, 'бонус за регистрацию'),

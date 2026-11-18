@@ -9,7 +9,7 @@ const id = () => randomBytes(12).toString('hex')
 
 /** Значения по умолчанию; администратор меняет их в админке. */
 export const defaults = {
-  prices: { photo: 10, video: 30, animate5: 8, animate10: 15 },
+  prices: { photo: 10, video: 30, animate5: 8, animate10: 15, song: 15 },
   bonuses: { signup: 30, daily: 10, referrer: 20, invitee: 10, subscribe: 100 },
   integrations: {
     yandex: { enabled: false, clientId: '', clientSecret: '' },
@@ -315,6 +315,7 @@ export function openAccounts(db) {
   function costFor(kind, options) {
     const prices = getSetting('prices')
     if (kind === 'video') return prices.video
+    if (kind === 'song') return prices.song ?? 15
     if (kind === 'animate') return options.duration === 10 ? prices.animate10 : prices.animate5
     return prices.photo
   }

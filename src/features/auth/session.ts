@@ -19,6 +19,7 @@ export const meSchema = z.object({
     video: z.number(),
     animate5: z.number(),
     animate10: z.number(),
+    song: z.number().optional(),
   }),
   bonuses: z.object({
     signup: z.number(),
@@ -117,10 +118,11 @@ export async function fetchProviders() {
 /** Стоимость задачи по ценам из профиля. */
 export function priceOf(
   me: Me | undefined,
-  kind: 'photo' | 'video' | 'animate',
+  kind: 'photo' | 'video' | 'animate' | 'song',
   duration?: number,
 ) {
   if (!me) return undefined
+  if (kind === 'song') return me.prices.song ?? 15
   if (kind === 'video') return me.prices.video
   if (kind === 'animate') return duration === 10 ? me.prices.animate10 : me.prices.animate5
   return me.prices.photo

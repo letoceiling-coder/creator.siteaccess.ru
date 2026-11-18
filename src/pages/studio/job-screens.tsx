@@ -42,6 +42,8 @@ export interface CreateTarget {
   people?: 1 | 2
   /** Сцены сценария для показа в мастере. */
   script?: string[]
+  /** Свой сюжет, согласованный с агентом: образ задан сценарием. */
+  custom?: boolean
 }
 
 function Label({ children }: { children: string }) {
@@ -267,7 +269,11 @@ export function WizardScreen({
     <div className="mx-auto grid max-w-xl gap-6 px-4 pt-4 md:px-6">
       <StepRail
         step={step}
-        names={['Фото', animate ? 'Движение' : pair ? 'Сценарий' : 'Образ', 'Проверка']}
+        names={[
+          'Фото',
+          animate ? 'Движение' : pair || target.custom ? 'Сценарий' : 'Образ',
+          'Проверка',
+        ]}
       />
       <input
         ref={input}
@@ -345,7 +351,7 @@ export function WizardScreen({
             </>
           ) : null}
 
-          {step === 1 && pair ? (
+          {step === 1 && (pair || target.custom) ? (
             <>
               <h1 className="font-display text-title text-ink text-[1.75rem]">Сценарий</h1>
               <ol className="grid gap-2">
@@ -360,12 +366,14 @@ export function WizardScreen({
                 ))}
               </ol>
               <p className="text-caption text-ink-muted">
-                Образы и место действия заданы сюжетом. Оба человека будут в каждой сцене.
+                {target.custom
+                  ? 'Сюжет согласован с агентом: образы, место и свет заданы сценарием.'
+                  : 'Образы и место действия заданы сюжетом. Оба человека будут в каждой сцене.'}
               </p>
             </>
           ) : null}
 
-          {step === 1 && !animate && !pair ? (
+          {step === 1 && !animate && !pair && !target.custom ? (
             <>
               <h1 className="font-display text-title text-ink text-[1.75rem]">Образ</h1>
               <div className="grid gap-2">
@@ -639,7 +647,27 @@ export function JobScreen({
             </div>
             <div className={cn('grid gap-2', job.kind === 'photo' && 'grid-cols-2')}>
               {job.results.map((r, i) =>
-                r.type === 'video' ? (
+                r.type === 'audio' ? (
+                  <div key={r.src} className="chamfer ticks bg-canvas-raised grid gap-4 p-5">
+                    <span className="font-display text-ink text-xl">{r.label ?? 'Песня'}</span>
+                    <audio src={r.src} controls className="w-full" />
+                    <a
+                      href={r.download}
+                      download
+                      className="chamfer-sm bg-canvas-sunken text-ink hover:bg-canvas-overlay inline-flex min-h-11 items-center justify-center gap-2"
+                    >
+                      <Download size={16} aria-hidden="true" /> Скачать MP3
+                    </a>
+                    {r.text ? (
+                      <details>
+                        <summary className="text-accent min-h-11 cursor-pointer py-2">
+                          Текст песни
+                        </summary>
+                        <p className="text-body text-ink-muted whitespace-pre-line">{r.text}</p>
+                      </details>
+                    ) : null}
+                  </div>
+                ) : r.type === 'video' ? (
                   <div key={r.src} className="grid gap-2">
                     <video
                       src={r.src}

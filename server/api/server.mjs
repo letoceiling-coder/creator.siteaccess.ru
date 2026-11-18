@@ -24,12 +24,13 @@ import { botsModule } from './bots.mjs'
 import { channelsModule } from './channels.mjs'
 import { autopostModule } from './autopost.mjs'
 import { llmModule } from './llm.mjs'
+import { scenariosModule } from './scenarios.mjs'
 import { paymentsModule } from './payments.mjs'
 import { adminRoutes } from './routes-admin.mjs'
 import { authRoutes } from './routes-auth.mjs'
 import { imageHasFace } from '../factory/faces.mjs'
 import { MAX_PHOTO_BYTES, normalize, sniff } from './images.mjs'
-import { planFor, stepsFor, times } from './presets.mjs'
+import { isCustom, planFor, setCustomLoader, stepsFor, times } from './presets.mjs'
 import { startWorker } from './worker.mjs'
 
 const env = process.env
@@ -85,6 +86,9 @@ function ipOf(req) {
 const payments = paymentsModule({ db, accounts, config, log })
 const channels = channelsModule({ db, accounts, config, log })
 const bots = botsModule({ db, accounts, config, log, channels })
+const llm = llmModule({ accounts, log })
+const scenarios = scenariosModule({ db, accounts, llm, log })
+setCustomLoader((id) => scenarios.load(id))
 const autopost = autopostModule({
   db,
   accounts,
@@ -92,7 +96,7 @@ const autopost = autopostModule({
   log,
   q,
   channels,
-  llm: llmModule({ accounts, log }),
+  llm,
 })
 if (env.WORKER !== 'off') autopost.start()
 if (env.WORKER !== 'off') bots.startTelegram()
@@ -178,10 +182,15 @@ async function createJob(req, res, sessionUser) {
   const target = text('target', '')
   const outfit = Number(text('outfit', '0'))
   const time = text('time', 'day')
-  if (text('consent', '') !== 'yes') throw new HttpError(400, 'Нужно согласие на обработку фото')
+  const song = kind === 'song'
+  if (!song && text('consent', '') !== 'yes')
+    throw new HttpError(400, 'Нужно согласие на обработку фото')
   const duration = Number(text('duration', '5'))
-  if (!['photo', 'video', 'animate'].includes(kind) || !/^[a-z0-9-]{1,40}$/.test(target))
+  if (!['photo', 'video', 'animate', 'song'].includes(kind) || !/^[a-z0-9-]{1,40}$/.test(target))
     throw new HttpError(400, 'Неверный сценарий')
+  // Свой сюжет — только согласованный с агентом и только свой; песня — только по сюжету.
+  if ((isCustom(target) || song) && !scenarios.forJob(target.slice(2), user.id, kind))
+    throw new HttpError(404, 'Сюжет не найден или ещё не согласован')
   if (!Number.isInteger(outfit) || outfit < 0 || outfit > 2 || !Object.hasOwn(times, time))
     throw new HttpError(400, 'Неверные параметры образа')
   if (![5, 10].includes(duration)) throw new HttpError(400, 'Длительность: 5 или 10 секунд')
@@ -199,16 +208,18 @@ async function createJob(req, res, sessionUser) {
   const files = form.getAll('photos').filter((f) => typeof f === 'object' && f !== null)
   // Для сюжета на двоих — ровно два фото: первое — первый человек, второе — второй.
   const pair = kind === 'video' && plan.people === 2
-  const minFiles = pair ? 2 : 1
-  const maxFiles = kind === 'animate' ? 1 : pair ? 2 : 3
+  const minFiles = song ? 0 : pair ? 2 : 1
+  const maxFiles = song ? 0 : kind === 'animate' ? 1 : pair ? 2 : 3
   if (files.length < minFiles || files.length > maxFiles)
     throw new HttpError(
       400,
-      kind === 'animate'
-        ? 'Нужно одно фото'
-        : pair
-          ? 'Нужно два фото: по одному на каждого человека'
-          : 'Нужно от одного до трёх фото',
+      song
+        ? 'Для песни фото не нужны'
+        : kind === 'animate'
+          ? 'Нужно одно фото'
+          : pair
+            ? 'Нужно два фото: по одному на каждого человека'
+            : 'Нужно от одного до трёх фото',
     )
 
   const id = randomBytes(16).toString('hex')
@@ -280,6 +291,8 @@ async function createJob(req, res, sessionUser) {
 
 function titleOf(kind, target) {
   if (kind === 'animate') return 'Оживление фото'
+  if (kind === 'song') return 'Песня'
+  if (isCustom(target)) return kind === 'video' ? 'Видео: свой сюжет' : 'Фотосессия: свой сюжет'
   return kind === 'video' ? `Видео: ${target}` : `Фотосессия: ${target}`
 }
 
@@ -294,6 +307,7 @@ async function handle(req, res) {
 
   if (path.startsWith('/api/admin/')) return handleAdmin(req, res, path, user)
   if (path.startsWith('/api/rewards')) return channels.handleRewards(req, res, path, user)
+  if (scenarios.owns(path)) return scenarios.handle(req, res, path, user)
   if (path.startsWith('/api/bots/') || path.startsWith('/api/auth/link')) {
     await bots.handle(req, res, path)
     if (res.headersSent) return
