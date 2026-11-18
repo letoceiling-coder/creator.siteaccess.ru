@@ -97,6 +97,13 @@ const cast = [
   'a young woman with dark skin and long braids',
   'a young woman with platinum blonde long hair',
 ]
+/** Ошибка для админки: без трассировок (старые записи могли сохранить ответ ComfyUI целиком). */
+function shortError(message) {
+  if (/OutOfMemory|out of memory/i.test(message)) return 'Не хватило видеопамяти GPU'
+  const text = String(message).replace(/\s+/g, ' ').trim()
+  return text.length > 300 ? `${text.slice(0, 300)}…` : text
+}
+
 const pick = (list) => list[Math.floor(Math.random() * list.length)]
 const seed = () => Math.floor(Math.random() * 2 ** 31)
 const categoryName = Object.fromEntries(photoCategories)
@@ -440,7 +447,7 @@ export function autopostModule({ db, accounts, config, log, q, channels, llm }) 
         id,
       )
     } catch (error) {
-      st.fail.run(error.message, Date.now(), id)
+      st.fail.run(shortError(error.message), Date.now(), id)
       log(`агент ${id.slice(0, 8)}: ${error.message}`)
     }
   }
@@ -481,7 +488,7 @@ export function autopostModule({ db, accounts, config, log, q, channels, llm }) 
         )
         if (doPublish) await publish(id)
       } catch (error) {
-        st.fail.run(error.message, Date.now(), id)
+        st.fail.run(shortError(error.message), Date.now(), id)
         log(`агент ${id.slice(0, 8)}: ${error.message}`)
       } finally {
         state.running = ''
@@ -531,7 +538,7 @@ export function autopostModule({ db, accounts, config, log, q, channels, llm }) 
       })),
       button: row.button ? JSON.parse(row.button) : undefined,
       results: JSON.parse(row.results),
-      error: row.error ?? undefined,
+      error: row.error ? shortError(row.error) : undefined,
       model: row.model ?? undefined,
       createdAt: row.created_at,
     }

@@ -1847,7 +1847,9 @@ function AutopostDraft({
       {item.model ? (
         <span className="text-caption text-ink-muted">Текст и образ: {item.model}</span>
       ) : null}
-      {item.error ? <span className="text-caption text-danger">{item.error}</span> : null}
+      {item.error ? (
+        <span className="text-caption text-danger line-clamp-3 break-words">{item.error}</span>
+      ) : null}
       {item.results.length ? <Results results={item.results} /> : null}
       {editable || item.status === 'failed' ? (
         <div className="flex flex-wrap gap-2">
