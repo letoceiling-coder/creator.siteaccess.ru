@@ -7,6 +7,10 @@ export interface LightboxItem {
   kind: 'photo' | 'video'
   src: string
   poster?: string
+  /** Файл для скачивания (по умолчанию src). */
+  download?: string
+  /** Подпись кадра. */
+  label?: string
 }
 
 /**
@@ -18,11 +22,14 @@ export function MediaLightbox({
   index,
   onIndex,
   label = 'Просмотр',
+  onDownload,
 }: {
   items: LightboxItem[]
   index: number | undefined
   onIndex: (i: number | undefined) => void
   label?: string
+  /** Скачивание из просмотра (например, закрывает бесплатную переделку). */
+  onDownload?: () => void
 }) {
   const open = index !== undefined && items[index] !== undefined
   const closeRef = useRef<HTMLButtonElement>(null)
@@ -83,11 +90,13 @@ export function MediaLightbox({
           <div className="flex items-center justify-between gap-2 px-3 pt-[max(env(safe-area-inset-top),0.75rem)]">
             <span className="text-caption text-white/80 tabular-nums">
               {(index ?? 0) + 1} / {count}
+              {item.label ? ` · ${item.label}` : ''}
             </span>
             <span className="flex gap-1">
               <a
-                href={item.src}
+                href={item.download ?? item.src}
                 download
+                onClick={onDownload}
                 target="_blank"
                 rel="noreferrer"
                 className="grid size-11 place-items-center text-white/85 hover:text-white"

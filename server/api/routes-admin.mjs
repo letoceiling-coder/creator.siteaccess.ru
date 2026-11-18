@@ -105,12 +105,25 @@ export function adminRoutes({ accounts, db, q, log, payments, bots, channels, au
       return send(res, 200, { users: st.users.all(query, like, like, query).map(userView) })
     }
 
-    const userMatch = /^\/api\/admin\/users\/([0-9a-f]{24})(\/tokens)?$/.exec(path)
+    const userMatch = /^\/api\/admin\/users\/([0-9a-f]{24})(\/tokens|\/history)?$/.exec(path)
     if (userMatch) {
       const target = st.user.get(userMatch[1])
       if (!target) throw new HttpError(404, 'Пользователь не найден')
       const body = ['POST', 'PATCH'].includes(method) ? await readJson(req) : {}
-      if (userMatch[2] && method === 'POST') {
+      if (userMatch[2] === '/history' && method === 'GET') {
+        // История операций с токенами: начисления, списания, бонусы, возвраты.
+        return send(res, 200, {
+          history: accounts.history(target.id, 50).map((h) => ({
+            id: h.id,
+            delta: h.delta,
+            reason: h.reason,
+            note: h.note ?? undefined,
+            balanceAfter: h.balance_after,
+            createdAt: h.created_at,
+          })),
+        })
+      }
+      if (userMatch[2] === '/tokens' && method === 'POST') {
         const delta = int(body.delta, -1_000_000, 1_000_000, 'количество')
         if (delta === 0) throw new HttpError(400, 'Укажите количество токенов')
         const note = String(body.note ?? '').slice(0, 200) || 'Изменено администратором'

@@ -29,6 +29,11 @@ export const meSchema = z.object({
     subscribe: z.number().optional(),
   }),
   referralUrl: z.string(),
+  /** Ссылки на ботов: в мини-приложениях делимся ими — друг откроет студию в мессенджере. */
+  referralLinks: z
+    .object({ telegram: z.string().optional(), max: z.string().optional() })
+    .optional(),
+  referrals: z.object({ invited: z.number(), rewarded: z.number() }).optional(),
 })
 
 export type Me = z.infer<typeof meSchema>

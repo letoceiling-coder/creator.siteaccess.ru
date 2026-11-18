@@ -269,6 +269,27 @@ export function openAccounts(db) {
     return user
   }
 
+  /**
+   * Привязать аккаунт мессенджера к уже вошедшему пользователю (для проверки подписки).
+   * Аккаунт мессенджера, уже связанный с другим пользователем, не переносится.
+   */
+  function linkIdentity(userId, provider, providerId) {
+    const link = st.identity.get(provider, String(providerId))
+    if (link) return link.user_id === userId ? 'linked' : 'taken'
+    st.insertIdentity.run(provider, String(providerId), userId, Date.now())
+    return 'linked'
+  }
+
+  /** Приглашённые пользователем: всего и за скольких уже начислена награда. */
+  function referralStats(userId) {
+    const row = db
+      .prepare(
+        'SELECT COUNT(*) AS invited, COALESCE(SUM(ref_rewarded), 0) AS rewarded FROM users WHERE referred_by = ?',
+      )
+      .get(userId)
+    return { invited: row.invited, rewarded: row.rewarded }
+  }
+
   /** Бесплатные токены раз в сутки — только при нулевом балансе. */
   function ensureDaily(user) {
     if (!user || user.balance > 0) return user
@@ -362,6 +383,8 @@ export function openAccounts(db) {
     change,
     createUser,
     userFromIdentity,
+    linkIdentity,
+    referralStats,
     ensureDaily,
     createSession,
     userBySession,

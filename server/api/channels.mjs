@@ -252,6 +252,12 @@ export function channelsModule({ db, accounts, config, log }) {
         'Нужен числовой ID канала, а не имя бота или канала. Откройте канал в web.max.ru — число в адресе после web.max.ru/ и есть ID. Или назначьте бота администратором канала заново: студия получит ID сама.',
       )
     const chat = await max('GET', `/chats/${chatId}`)
+    // ID диалога с ботом или группы — не канал: туда публиковать и проверять подписку нельзя.
+    if (chat.type && chat.type !== 'channel')
+      throw new HttpError(
+        400,
+        `Это не канал MAX (${chat.type === 'dialog' ? 'это диалог с ботом' : 'это групповой чат'}). Нужен ID канала: откройте сам канал в web.max.ru.`,
+      )
     // Публиковать может владелец или администратор с правом «write».
     const me = await max('GET', `/chats/${chatId}/members/me`).catch(() => undefined)
     const canPost = me
@@ -534,6 +540,14 @@ export function channelsModule({ db, accounts, config, log }) {
     channels: () => st.list.all().map(view),
     /** Канал MAX из события bot_added / bot_removed (вебхук бота). */
     async onMaxUpdate(update) {
+      // Пост в канале, где бот — администратор: регистрируем канал, если его ещё нет.
+      if (update.update_type === 'channel_post' && update.chat_id) {
+        if (!st.get.get(`max:${update.chat_id}`))
+          await addMax(String(update.chat_id)).catch((e) =>
+            log(`MAX канал ${update.chat_id}: ${e.message}`),
+          )
+        return
+      }
       if (update.update_type === 'bot_added' && update.chat_id) {
         await addMax(update.chat_id).catch((e) => log(`MAX канал ${update.chat_id}: ${e.message}`))
       } else if (update.update_type === 'bot_removed' && update.chat_id) {

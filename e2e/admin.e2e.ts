@@ -25,7 +25,7 @@ const limits = {
   post: { media: 10, body: 272629760 },
 }
 
-async function json(page: Page, url: string, body: unknown) {
+async function json(page: Page, url: string | RegExp, body: unknown) {
   await page.route(url, (route) =>
     route.fulfill({ contentType: 'application/json', body: JSON.stringify(body) }),
   )
@@ -318,5 +318,62 @@ test.describe('admin publications', () => {
     await page.getByRole('button', { name: 'Я подписался' }).first().click()
     await expect(page.getByText('Готово! +100 токенов на балансе').first()).toBeVisible()
     await expect(page.getByText('Бонус уже получен', { exact: false }).first()).toBeVisible()
+  })
+
+  test('users: credit and debit tokens with history', async ({ page }) => {
+    await json(page, '**/api/me', me('admin'))
+    await json(page, '**/api/admin/stats', {
+      users: 1,
+      usersToday: 0,
+      jobsToday: 0,
+      queued: 0,
+      running: 0,
+      failedToday: 0,
+      spentToday: 0,
+    })
+    const target = {
+      id: 'f'.repeat(24),
+      name: 'Анна',
+      email: 'anna@example.com',
+      role: 'user',
+      balance: 30,
+      blocked: false,
+      jobs: 2,
+      providers: ['telegram'],
+      createdAt: Date.now(),
+    }
+    let posted: { delta?: number; note?: string } = {}
+    await json(page, /\/api\/admin\/users(\?.*)?$/, { users: [target] })
+    await page.route(`**/api/admin/users/${target.id}/tokens`, async (route) => {
+      posted = route.request().postDataJSON()
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ user: { ...target, balance: 30 + (posted.delta ?? 0) } }),
+      })
+    })
+    await json(page, `**/api/admin/users/${target.id}/history`, {
+      history: [
+        {
+          id: 1,
+          delta: 100,
+          reason: 'admin',
+          note: 'Подарок',
+          balanceAfter: 130,
+          createdAt: Date.now(),
+        },
+      ],
+    })
+    await page.goto('/admin', { waitUntil: 'domcontentloaded' })
+    await page.getByRole('tab', { name: 'Пользователи' }).click()
+    await page.getByRole('button', { name: '100', exact: true }).click()
+    await page.getByLabel('Комментарий к операции').fill('Подарок')
+    page.once('dialog', (d) => void d.accept())
+    await page.getByRole('button', { name: 'Начислить 100' }).click()
+    await expect(page.getByText('Начислено 100 ток. Баланс: 130')).toBeVisible()
+    expect(posted).toEqual({ delta: 100, note: 'Подарок' })
+    await expect(page.getByText('130 ток.')).toBeVisible()
+    await page.getByRole('button', { name: 'История операций' }).click()
+    await expect(page.getByText('+100 → 130')).toBeVisible()
+    await noOverflow(page)
   })
 })

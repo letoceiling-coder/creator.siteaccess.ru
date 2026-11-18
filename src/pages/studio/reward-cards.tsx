@@ -93,6 +93,39 @@ export function SubscribeCard({ className }: { className?: string }) {
   )
   const allClaimed = channels.every((c) => c.claimed)
 
+  /** Привязка Telegram/MAX к текущему аккаунту через бота, затем — проверка подписки. */
+  async function linkAndCheck(id: string, kind: 'telegram' | 'max') {
+    setBusy(id)
+    setMessage({ ok: `Подтвердите привязку в ${platformName[kind]} — откроем бота` })
+    try {
+      const res = await apiFetch(
+        '/api/auth/link/start',
+        jsonInit('POST', { platform: kind, link: true }),
+      )
+      const body = (await res.json()) as { code?: string; url?: string; error?: string }
+      if (!res.ok || !body.code || !body.url)
+        throw new ApiError(body.error ?? 'Привязка недоступна')
+      platform.adapter.openLink(body.url)
+      for (let i = 0; i < 150; i++) {
+        await new Promise((r) => window.setTimeout(r, 2000))
+        const st = (await (await apiFetch(`/api/auth/link/${body.code}`)).json()) as {
+          status?: string
+        }
+        if (st.status === 'confirmed') break
+        if (st.status === 'taken')
+          throw new ApiError(
+            `Этот аккаунт ${platformName[kind]} уже связан с другим пользователем студии. Войдите через ${platformName[kind]}, чтобы получить бонус там.`,
+          )
+        if (st.status === 'expired' || st.status === 'used' || i === 149)
+          throw new ApiError('Время на привязку вышло. Нажмите ещё раз.')
+      }
+      await check(id)
+    } catch (e) {
+      setMessage({ error: e instanceof ApiError ? e.message : 'Не удалось привязать аккаунт' })
+      setBusy('')
+    }
+  }
+
   async function check(id: string) {
     setBusy(id)
     setMessage({})
@@ -151,9 +184,15 @@ export function SubscribeCard({ className }: { className?: string }) {
                   <StudioButton
                     className="min-w-0 flex-1 basis-40 px-4"
                     disabled={busy !== ''}
-                    onClick={() => void check(c.id)}
+                    onClick={() =>
+                      void (data.linked[c.platform] ? check(c.id) : linkAndCheck(c.id, c.platform))
+                    }
                   >
-                    {busy === c.id ? 'Проверяем…' : 'Я подписался'}
+                    {busy === c.id
+                      ? 'Проверяем…'
+                      : data.linked[c.platform]
+                        ? 'Я подписался'
+                        : `Привязать ${platformName[c.platform]} и проверить`}
                   </StudioButton>
                 ) : (
                   <StudioButton
@@ -173,8 +212,8 @@ export function SubscribeCard({ className }: { className?: string }) {
         )}
         {session.me && !allClaimed && !channels.some((c) => data.linked[c.platform]) ? (
           <p className="text-caption text-ink-muted">
-            Проверка идёт через бота студии — для этого войдите через{' '}
-            {channels.map((c) => platformName[c.platform]).join(' или ')}.
+            Подписку проверяет бот студии: привяжите аккаунт мессенджера к студии одной кнопкой —
+            бот попросит подтвердить, баланс останется прежним.
           </p>
         ) : null}
         {message.ok ? (
@@ -202,6 +241,12 @@ export function InviteCard({ className }: { className?: string }) {
   const cover = useCover(4, heroDeck[2] ?? '')
   const [copied, setCopied] = useState(false)
   const me = session.me
+  // В мини-приложении делимся ссылкой на бота — друг откроет студию прямо в мессенджере.
+  const link =
+    (platform.id === 'telegram' && me?.referralLinks?.telegram) ||
+    (platform.id === 'max' && me?.referralLinks?.max) ||
+    me?.referralUrl ||
+    ''
   const invitee = me?.bonuses.invitee ?? data?.invitee ?? 10
   const referrer = me?.bonuses.referrer ?? data?.referrer ?? 20
 
@@ -210,12 +255,12 @@ export function InviteCard({ className }: { className?: string }) {
     const text =
       'Фотосессии и видео с собой в главной роли — попробуй, по ссылке будут бонусные токены'
     try {
-      if (await platform.adapter.share(text, me.referralUrl)) return
+      if (await platform.adapter.share(text, link)) return
       if (navigator.share) {
-        await navigator.share({ title: 'AI Creative Studio', text, url: me.referralUrl })
+        await navigator.share({ title: 'AI Creative Studio', text, url: link })
         return
       }
-      await navigator.clipboard.writeText(me.referralUrl)
+      await navigator.clipboard.writeText(link)
       setCopied(true)
       window.setTimeout(() => setCopied(false), 2000)
     } catch {
@@ -252,10 +297,18 @@ export function InviteCard({ className }: { className?: string }) {
             Вам — {referrer} токенов, когда он создаст первую работу
           </li>
         </ul>
+        {me?.referrals ? (
+          <p className="text-caption text-ink-muted tabular-nums">
+            Приглашено: {me.referrals.invited} · награда получена за {me.referrals.rewarded}
+            {me.referrals.invited > me.referrals.rewarded
+              ? ` · ждут первую работу: ${me.referrals.invited - me.referrals.rewarded}`
+              : ''}
+          </p>
+        ) : null}
         {me ? (
           <div className="grid gap-2">
             <code className="chamfer-sm bg-canvas-sunken text-ink block min-w-0 truncate px-4 py-3 text-sm">
-              {me.referralUrl}
+              {link}
             </code>
             <StudioButton arrow onClick={() => void share()}>
               {copied ? 'Ссылка скопирована' : 'Пригласить друзей'}

@@ -34,9 +34,16 @@ export function botsModule({ db, accounts, config, log, channels }) {
       consumed INTEGER NOT NULL DEFAULT 0
     );
   `)
+  for (const column of ['ref TEXT', 'link_user TEXT']) {
+    try {
+      db.exec(`ALTER TABLE login_links ADD COLUMN ${column}`)
+    } catch {
+      // колонка уже есть
+    }
+  }
   const st = {
     insert: db.prepare(
-      'INSERT INTO login_links (code, nonce_hash, platform, created_at) VALUES (?, ?, ?, ?)',
+      'INSERT INTO login_links (code, nonce_hash, platform, created_at, ref, link_user) VALUES (?, ?, ?, ?, ?, ?)',
     ),
     get: db.prepare('SELECT * FROM login_links WHERE code = ?'),
     confirm: db.prepare(
@@ -181,10 +188,19 @@ export function botsModule({ db, accounts, config, log, channels }) {
       const payload = message.text.split(' ')[1] ?? ''
       const chatId = message.chat.id
       if (payload.startsWith('login_')) return askConfirm('telegram', chatId, payload.slice(6))
+      // /start ref_КОД — пришли по приглашению: код передаём в мини-приложение.
+      const ref = /^ref_([\w-]{3,16})$/.exec(payload)?.[1]
+      const app = tgWebApp()
       return tg('sendMessage', {
         chat_id: chatId,
-        text: 'Привет! Здесь фотосессии и видео, где вы — главный герой. Откройте студию кнопкой ниже.',
-        reply_markup: { inline_keyboard: [[{ text: 'Открыть студию', web_app: tgWebApp() }]] },
+        text: ref
+          ? 'Привет! Вас пригласили в студию — при входе получите бонусные токены. Откройте студию кнопкой ниже.'
+          : 'Привет! Здесь фотосессии и видео, где вы — главный герой. Откройте студию кнопкой ниже.',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: 'Открыть студию', web_app: ref ? { url: `${app.url}?ref=${ref}` } : app }],
+          ],
+        },
       })
     }
     const cb = update.callback_query
@@ -195,15 +211,13 @@ export function botsModule({ db, accounts, config, log, channels }) {
       })
       await tg('answerCallbackQuery', {
         callback_query_id: cb.id,
-        text: ok ? 'Вход подтверждён' : 'Ссылка устарела',
+        text: ok === 'taken' ? 'Аккаунт уже связан с другим' : ok ? 'Готово' : 'Ссылка устарела',
       })
       if (cb.message)
         await tg('editMessageText', {
           chat_id: cb.message.chat.id,
           message_id: cb.message.message_id,
-          text: ok
-            ? '✅ Вход на сайте подтверждён. Вернитесь в браузер.'
-            : 'Ссылка для входа устарела. Нажмите «Войти через Telegram» на сайте ещё раз.',
+          text: replyFor(ok, 'Telegram'),
         })
     }
     return undefined
@@ -284,14 +298,32 @@ export function botsModule({ db, accounts, config, log, channels }) {
   async function maxUpdate(update) {
     if (update.update_type === 'bot_added' || update.update_type === 'bot_removed')
       return channels?.onMaxUpdate(update)
+    const recipient = update.message?.recipient
+    if (
+      update.update_type === 'message_created' &&
+      recipient?.chat_type === 'channel' &&
+      recipient.chat_id
+    )
+      return channels?.onMaxUpdate({ update_type: 'channel_post', chat_id: recipient.chat_id })
     if (update.update_type === 'bot_started') {
       const payload = update.payload ?? ''
       if (payload.startsWith('login_'))
         return askConfirm('max', update.user.user_id, payload.slice(6))
+      const ref = /^ref_([\w-]{3,16})$/.exec(payload)?.[1]
       return maxSend(
         update.user.user_id,
-        'Привет! Здесь фотосессии и видео, где вы — главный герой.',
-        [[{ type: 'link', text: 'Открыть студию', url: maxAppLink() }]],
+        ref
+          ? 'Привет! Вас пригласили в студию — при входе получите бонусные токены.'
+          : 'Привет! Здесь фотосессии и видео, где вы — главный герой.',
+        [
+          [
+            {
+              type: 'link',
+              text: 'Открыть студию',
+              url: ref ? `${maxAppLink()}=ref_${ref}` : maxAppLink(),
+            },
+          ],
+        ],
       )
     }
     if (
@@ -313,9 +345,7 @@ export function botsModule({ db, accounts, config, log, channels }) {
       })
       return max('POST', `/answers?callback_id=${encodeURIComponent(cb.callback_id)}`, {
         message: {
-          text: ok
-            ? '✅ Вход на сайте подтверждён. Вернитесь в браузер.'
-            : 'Ссылка для входа устарела. Нажмите «Войти через MAX» на сайте ещё раз.',
+          text: replyFor(ok, 'MAX'),
           attachments: [],
         },
       })
@@ -353,14 +383,34 @@ export function botsModule({ db, accounts, config, log, channels }) {
     )
   }
 
+  function replyFor(ok, name) {
+    if (ok === 'taken')
+      return `Этот аккаунт ${name} уже связан с другим пользователем студии. Войдите на сайте через ${name}, чтобы попасть в тот аккаунт.`
+    if (ok === 'linked') return `✅ ${name} привязан к вашему аккаунту студии. Вернитесь в браузер.`
+    return ok
+      ? '✅ Вход на сайте подтверждён. Вернитесь в браузер.'
+      : `Ссылка для входа устарела. Нажмите «Войти через ${name}» на сайте ещё раз.`
+  }
+
   function confirmLink(code, platform, profile) {
     const link = st.get.get(code)
     if (!link || link.platform !== platform) return false
+    // Привязка к уже вошедшему пользователю: тот же аккаунт на сайте получает мессенджер.
+    if (link.link_user) {
+      const result = accounts.linkIdentity(link.link_user, platform, profile.id)
+      if (result !== 'linked') {
+        st.confirm.run('taken', code, Date.now() - LINK_TTL)
+        return 'taken'
+      }
+      log(`${platform}: аккаунт привязан к пользователю ${link.link_user.slice(0, 8)}`)
+      return st.confirm.run(link.link_user, code, Date.now() - LINK_TTL).changes === 1 && 'linked'
+    }
+    // Новый пользователь по ссылке-приглашению получает бонус, пригласивший — награду позже.
     const user = accounts.userFromIdentity(
       platform,
       profile.id,
       { name: profile.name || 'Пользователь' },
-      null,
+      link.ref ?? null,
     )
     return st.confirm.run(user.id, code, Date.now() - LINK_TTL).changes === 1
   }
@@ -389,7 +439,7 @@ export function botsModule({ db, accounts, config, log, channels }) {
     stopTelegram() {
       polling.active = false
     },
-    async handle(req, res, path) {
+    async handle(req, res, path, user) {
       const method = req.method
 
       if (method === 'POST' && path === '/api/bots/telegram/webhook') {
@@ -420,7 +470,10 @@ export function botsModule({ db, accounts, config, log, channels }) {
         st.gc.run(Date.now() - 24 * 3_600_000)
         const code = randomBytes(12).toString('hex')
         const nonce = randomBytes(24).toString('base64url')
-        st.insert.run(code, sha(nonce), platform, Date.now())
+        const ref = typeof body.ref === 'string' && /^[\w-]{3,16}$/.test(body.ref) ? body.ref : null
+        // link=true — привязать мессенджер к текущему аккаунту (нужно для бонуса за подписку).
+        const linkUser = body.link === true && user ? user.id : null
+        st.insert.run(code, sha(nonce), platform, Date.now(), ref, linkUser)
         const bot = botUsername(platform)
         const url =
           platform === 'telegram'
@@ -437,6 +490,7 @@ export function botsModule({ db, accounts, config, log, channels }) {
         if (!link || !same(link.nonce_hash, sha(cookies(req)[LINK_COOKIE] ?? '')))
           throw new HttpError(404, 'Вход не найден')
         if (link.consumed) return send(res, 200, { status: 'used' })
+        if (link.user_id === 'taken') return send(res, 200, { status: 'taken' })
         if (!link.user_id)
           return send(res, 200, {
             status: link.created_at < Date.now() - LINK_TTL ? 'expired' : 'pending',

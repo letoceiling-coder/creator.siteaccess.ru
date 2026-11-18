@@ -53,6 +53,16 @@ export function authRoutes({ accounts, config, log, ipOf, payments, bots }) {
       prices: accounts.getSetting('prices'),
       bonuses: accounts.getSetting('bonuses'),
       referralUrl: `${config.publicUrl}/?ref=${fresh.ref_code}`,
+      // В мини-приложениях делимся ссылкой на бота: друг откроет студию прямо в мессенджере.
+      referralLinks: {
+        telegram: integrations().telegram.botUsername
+          ? `https://t.me/${integrations().telegram.botUsername}?startapp=ref_${fresh.ref_code}`
+          : undefined,
+        max: integrations().max.botUsername
+          ? `https://max.ru/${integrations().max.botUsername}?startapp=ref_${fresh.ref_code}`
+          : undefined,
+      },
+      referrals: accounts.referralStats(fresh.id),
     }
   }
 

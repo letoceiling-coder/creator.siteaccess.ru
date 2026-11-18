@@ -29,7 +29,7 @@ import { stories } from '../factory/stories.mjs'
 import { camera, directShots, lighting } from './directing.mjs'
 import { HttpError, readJson, send } from './http.mjs'
 import { toJpeg, toWebp } from './images.mjs'
-import { faceVisible, negative } from './presets.mjs'
+import { extraPeopleNegative, faceVisible, negative, onlyOne } from './presets.mjs'
 import { FEMININE_WEAR, genderClause, genderNegative, storyGender } from './gender.mjs'
 
 const TEST_IMAGE = process.env.AUTOPOST_TEST_IMAGE ?? ''
@@ -228,8 +228,8 @@ export function autopostModule({ db, accounts, config, log, q, channels, llm }) 
     const cover = await withFace(async () => {
       const files = await runWorkflow(
         qwenImageWorkflow({
-          prompt: `Editorial medium-full shot, 35mm lens, the location is clearly visible around the person. Subject: ${who}${look ? `, ${look}` : ''}, with ${prop}, ${move}, expression ${mood}. ${genderClause(gender)} Location: ${story.scene}. Light: ${lighting.day}. Palette: ${story.palette}. ${faceVisible} ${style}`,
-          negative: `${negative}, ${genderNegative(gender)}`,
+          prompt: `Editorial medium-full shot, 35mm lens, the location is clearly visible around the person. Subject: ${who}${look ? `, ${look}` : ''}, with ${prop}, ${move}, expression ${mood}. ${genderClause(gender)} ${onlyOne} Location: ${story.scene}. Light: ${lighting.day}. Palette: ${story.palette}. ${faceVisible} ${style}`,
+          negative: `${negative}, ${extraPeopleNegative}, ${genderNegative(gender)}`,
           width: 1104,
           height: 1472,
           seed: seed(),
@@ -249,7 +249,7 @@ export function autopostModule({ db, accounts, config, log, q, channels, llm }) 
           qwenEditWorkflow({
             images: [ref],
             prompt: `${shot.camera}. Subject: the person from the reference photo, ${shot.pose}. Location: ${story.scene}. Light: ${lighting.day}. Palette: ${story.palette}. ${faceVisible} Keep the face and identity exactly the same as in the reference, do not copy its pose or framing. ${style}`,
-            negative: `${negative}, ${genderNegative(gender)}`,
+            negative: `${negative}, ${extraPeopleNegative}, ${genderNegative(gender)}`,
             seed: seed(),
             width: 1104,
             height: 1472,
@@ -303,8 +303,8 @@ export function autopostModule({ db, accounts, config, log, q, channels, llm }) 
     const still1 = await withFace(async () => {
       const files = await runWorkflow(
         qwenImageWorkflow({
-          prompt: `Cinematic film still: ${beats[0].still}. Subject: ${who}${look ? `, ${look}` : ''}. ${genderClause(gender)} ${faceVisible} ${videoStyle}`,
-          negative: `${negative}, ${genderNegative(gender)}`,
+          prompt: `Cinematic film still: ${beats[0].still}. Subject: ${who}${look ? `, ${look}` : ''}. ${genderClause(gender)} ${onlyOne} ${faceVisible} ${videoStyle}`,
+          negative: `${negative}, ${extraPeopleNegative}, ${genderNegative(gender)}`,
           width: sz.still[0],
           height: sz.still[1],
           seed: seed(),
@@ -324,7 +324,7 @@ export function autopostModule({ db, accounts, config, log, q, channels, llm }) 
         qwenEditWorkflow({
           images: [ref],
           prompt: `Cinematic film still: ${beats[1].still}. Subject: the person from the reference photo. ${faceVisible} Keep the face and identity exactly the same as in the reference, do not copy its pose or framing. ${videoStyle}`,
-          negative: `${negative}, ${genderNegative(gender)}`,
+          negative: `${negative}, ${extraPeopleNegative}, ${genderNegative(gender)}`,
           seed: seed(),
           width: sz.still[0],
           height: sz.still[1],

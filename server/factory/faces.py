@@ -86,6 +86,9 @@ def check(path, detector, need, recognizer=None, refs=None):
     _, reason, score, height = judged[main]
     ok = ok_faces >= need
     extra = {}
+    # Сколько людей в кадре: лица не меньше 40% самого крупного (мелкие фоновые не считаем).
+    largest = max(float(f[3]) for f in faces)
+    extra['people'] = sum(1 for f in faces if float(f[3]) >= largest * 0.4 and float(f[14]) >= 0.7)
     if recognizer is not None and refs:
         feats = features(image, faces, recognizer)
         per_ref = [

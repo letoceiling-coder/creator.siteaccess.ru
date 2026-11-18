@@ -35,7 +35,7 @@ const rows = [
       ),
       s(
         'Конфетти',
-        'standing among friends silhouettes, arms raised, golden confetti in the air',
+        'standing alone on a night terrace, arms raised, golden confetti in the air',
         'golden confetti falls in slow motion, the person spins with arms up and laughs',
       ),
       s(
@@ -233,8 +233,8 @@ const rows = [
       ),
       s(
         'Автограф',
-        'signing an autograph for fans behind the barrier, smiling',
-        'the person signs an autograph and waves to the fans',
+        'signing an autograph on a photo card at the red carpet barrier, camera flashes in the dark background, smiling',
+        'the person signs the autograph and waves toward the camera flashes',
       ),
       s(
         'Взгляд в камеру',
@@ -465,7 +465,7 @@ const rows = [
       s(
         'Кафе',
         'sitting at a street cafe table under an awning, cup of coffee',
-        'the person sips coffee and laughs, people with umbrellas pass by',
+        'the person sips coffee and laughs, rain falls on the empty street behind',
       ),
       s(
         'Солнце',

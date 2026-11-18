@@ -1380,3 +1380,92 @@ test('переделка: журнал генерации, рецензент, �
   assert.ok(feedback.data.byReason.some((r) => r.name === 'face'))
   assert.equal((await call('/api/admin/feedback')).status, 403)
 })
+
+test('приглашение через вход ботом, привязка мессенджера к аккаунту, занятый аккаунт', async () => {
+  const secret = createHash('sha256')
+    .update('creator-webhook:max-test-token')
+    .digest('hex')
+    .slice(0, 48)
+  const hook = (body) =>
+    fetch(`${base}/api/bots/max/webhook`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-max-bot-api-secret': secret },
+      body: JSON.stringify(body),
+    })
+  const viaBot = async (call, maxUserId, extra) => {
+    const start = await call('/api/auth/link/start', {
+      method: 'POST',
+      json: { platform: 'max', ...extra },
+    })
+    assert.equal(start.status, 201, JSON.stringify(start.data))
+    const user = { user_id: maxUserId, name: `Макс ${maxUserId}` }
+    await hook({ update_type: 'bot_started', user, payload: `login_${start.data.code}` })
+    await hook({
+      update_type: 'message_callback',
+      callback: {
+        callback_id: `cb${maxUserId}`,
+        payload: `confirm_login:${start.data.code}`,
+        user,
+      },
+    })
+    await new Promise((r) => setTimeout(r, 300))
+    return (await call(`/api/auth/link/${start.data.code}`)).data.status
+  }
+
+  // Приглашение: код из ссылки доходит через вход ботом MAX.
+  const inviter = await newUser()
+  assert.match(inviter.me.referralLinks.max, /^https:\/\/max\.ru\/studio_max_bot\?startapp=ref_/)
+  const friend = client()
+  assert.equal(await viaBot(friend, 5555, { ref: inviter.me.user.refCode }), 'confirmed')
+  const friendMe = (await friend('/api/me')).data
+  assert.equal(friendMe.user.balance, 40)
+  assert.deepEqual((await inviter.call('/api/me')).data.referrals, { invited: 1, rewarded: 0 })
+
+  // Привязка: вошедший по почте пользователь добавляет MAX к своему аккаунту.
+  const owner = await newUser()
+  assert.equal((await owner.call('/api/rewards')).data.linked.max, false)
+  assert.equal(await viaBot(owner.call, 6666, { link: true }), 'confirmed')
+  const ownerMe = (await owner.call('/api/me')).data
+  assert.equal(ownerMe.user.id, owner.me.user.id)
+  assert.equal(ownerMe.user.balance, 30)
+  assert.deepEqual(ownerMe.user.providers, ['max'])
+  assert.equal((await owner.call('/api/rewards')).data.linked.max, true)
+  assert.match(fake.max.at(-1).body.message.text, /привязан к вашему аккаунту/)
+
+  // Тот же аккаунт MAX к другому пользователю не привязать.
+  const other = await newUser()
+  assert.equal(await viaBot(other.call, 6666, { link: true }), 'taken')
+  assert.match(fake.max.at(-1).body.message.text, /уже связан с другим пользователем/)
+  assert.equal((await other.call('/api/rewards')).data.linked.max, false)
+})
+
+test('админка: начисление и списание токенов пользователю, история операций', async () => {
+  const adm = await admin()
+  const { call, me } = await newUser()
+  const add = await adm(`/api/admin/users/${me.user.id}/tokens`, {
+    method: 'POST',
+    json: { delta: 250, note: 'Подарок' },
+  })
+  assert.equal(add.data.user.balance, 280)
+  const sub = await adm(`/api/admin/users/${me.user.id}/tokens`, {
+    method: 'POST',
+    json: { delta: -80 },
+  })
+  assert.equal(sub.data.user.balance, 200)
+  assert.equal(
+    (await adm(`/api/admin/users/${me.user.id}/tokens`, { method: 'POST', json: { delta: -1000 } }))
+      .status,
+    400,
+  )
+  const history = (await adm(`/api/admin/users/${me.user.id}/history`)).data.history
+  assert.deepEqual(
+    history.slice(0, 2).map((h) => [h.delta, h.reason, h.balanceAfter]),
+    [
+      [-80, 'admin', 200],
+      [250, 'admin', 280],
+    ],
+  )
+  assert.equal(history[1].note, 'Подарок')
+  assert.equal((await call(`/api/admin/users/${me.user.id}/history`)).status, 403)
+  assert.equal((await call('/api/me')).data.user.balance, 200)
+})

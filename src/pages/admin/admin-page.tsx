@@ -47,7 +47,7 @@ const dt = (ts?: number) =>
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="grid gap-4">
+    <section className="grid gap-4 [&>*]:min-w-0">
       <h2 className="font-display text-title text-ink">{title}</h2>
       {children}
     </section>
@@ -124,10 +124,155 @@ interface AdminUser {
   lastLogin?: number
 }
 
+interface LedgerRow {
+  id: number
+  delta: number
+  reason: string
+  note?: string
+  balanceAfter: number
+  createdAt: number
+}
+
+const ledgerReason: Record<string, string> = {
+  signup: 'Бонус за регистрацию',
+  invitee: 'Бонус по приглашению',
+  referral: 'Награда за друга',
+  daily: 'Бесплатно на день',
+  subscribe: 'Подписка на канал',
+  job: 'Генерация',
+  refund: 'Возврат',
+  admin: 'Администратор',
+  purchase: 'Покупка',
+}
+
+/** Начисление и списание токенов конкретному пользователю, с историей операций. */
+function TokensPanel({ user, onChange }: { user: AdminUser; onChange: (u: AdminUser) => void }) {
+  const [amount, setAmount] = useState('')
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState<{ error?: string; ok?: string }>({})
+  const [history, setHistory] = useState<LedgerRow[]>()
+  const value = Number(amount)
+
+  async function loadHistory() {
+    try {
+      setHistory(
+        (await api<{ history: LedgerRow[] }>(`/api/admin/users/${user.id}/history`)).history,
+      )
+    } catch (e) {
+      setMessage({ error: e instanceof Error ? e.message : 'Ошибка' })
+    }
+  }
+
+  async function apply(sign: 1 | -1) {
+    if (!value) return
+    const verb = sign > 0 ? 'Начислить' : 'Списать'
+    if (!window.confirm(`${verb} ${value} токенов пользователю «${user.name}»?`)) return
+    setBusy(true)
+    setMessage({})
+    try {
+      const res = await api<{ user: AdminUser }>(
+        `/api/admin/users/${user.id}/tokens`,
+        jsonInit('POST', {
+          delta: sign * value,
+          note: note.trim() || (sign > 0 ? 'Начислено администратором' : 'Списано администратором'),
+        }),
+      )
+      onChange(res.user)
+      setMessage({
+        ok: `${sign > 0 ? 'Начислено' : 'Списано'} ${value} ток. Баланс: ${res.user.balance}`,
+      })
+      setAmount('')
+      setNote('')
+      if (history) void loadHistory()
+    } catch (e) {
+      setMessage({ error: e instanceof Error ? e.message : 'Ошибка' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="bg-canvas-sunken grid gap-3 p-3">
+      <span className="text-caption tracking-label text-ink-muted uppercase">Токены</span>
+      <div className="flex flex-wrap gap-2">
+        {[10, 50, 100, 500].map((n) => (
+          <button
+            key={n}
+            type="button"
+            onClick={() => setAmount(String(n))}
+            aria-pressed={value === n}
+            className={cn(
+              'chamfer-sm min-h-11 px-4 tabular-nums transition-colors duration-[140ms]',
+              value === n ? 'bg-accent-fill text-accent-ink' : 'bg-canvas-raised text-ink',
+            )}
+          >
+            {n}
+          </button>
+        ))}
+        <input
+          aria-label={`Сколько токенов для ${user.name}`}
+          inputMode="numeric"
+          placeholder="Своё число"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value.replace(/\D/g, '').slice(0, 7))}
+          className="bg-canvas text-ink border-line-strong min-h-11 w-32 border-b-2 px-3 tabular-nums"
+        />
+      </div>
+      <input
+        aria-label="Комментарий к операции"
+        placeholder="Комментарий (видит пользователь в истории)"
+        value={note}
+        maxLength={200}
+        onChange={(e) => setNote(e.target.value)}
+        className="bg-canvas text-ink border-line-strong min-h-11 min-w-0 border-b-2 px-3"
+      />
+      <div className="flex flex-wrap gap-2">
+        <StudioButton disabled={busy || !value} onClick={() => void apply(1)}>
+          Начислить{value ? ` ${value}` : ''}
+        </StudioButton>
+        <StudioButton variant="outline" disabled={busy || !value} onClick={() => void apply(-1)}>
+          Списать
+        </StudioButton>
+        <StudioButton
+          variant="quiet"
+          onClick={() => (history ? setHistory(undefined) : void loadHistory())}
+        >
+          {history ? 'Скрыть историю' : 'История операций'}
+        </StudioButton>
+      </div>
+      <Notice {...message} />
+      {history ? (
+        history.length === 0 ? (
+          <p className="text-caption text-ink-muted">Операций пока нет.</p>
+        ) : (
+          <ul className="divide-line grid divide-y">
+            {history.map((h) => (
+              <li key={h.id} className="flex flex-wrap items-baseline justify-between gap-2 py-2">
+                <span className="grid min-w-0">
+                  <span className="text-ink">{ledgerReason[h.reason] ?? h.reason}</span>
+                  <span className="text-caption text-ink-muted break-words">
+                    {dt(h.createdAt)}
+                    {h.note ? ` · ${h.note}` : ''}
+                  </span>
+                </span>
+                <span
+                  className={cn('tabular-nums', h.delta > 0 ? 'text-success' : 'text-ink-muted')}
+                >
+                  {h.delta > 0 ? '+' : ''}
+                  {h.delta} → {h.balanceAfter}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )
+      ) : null}
+    </div>
+  )
+}
+
 function UserRow({ user, onChange }: { user: AdminUser; onChange: (u: AdminUser) => void }) {
   const { me } = useSession()
-  const [delta, setDelta] = useState('')
-  const [note, setNote] = useState('')
   const [error, setError] = useState<string>()
   const self = me?.user.id === user.id
 
@@ -143,23 +288,8 @@ function UserRow({ user, onChange }: { user: AdminUser; onChange: (u: AdminUser)
     }
   }
 
-  async function tokens() {
-    setError(undefined)
-    try {
-      const res = await api<{ user: AdminUser }>(
-        `/api/admin/users/${user.id}/tokens`,
-        jsonInit('POST', { delta: Number(delta), note }),
-      )
-      onChange(res.user)
-      setDelta('')
-      setNote('')
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Ошибка')
-    }
-  }
-
   return (
-    <li className="chamfer-sm bg-canvas-raised grid gap-3 p-4">
+    <li className="chamfer-sm bg-canvas-raised grid min-w-0 gap-3 p-4 [&>*]:min-w-0">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="grid">
           <span className="text-ink font-medium">
@@ -180,27 +310,7 @@ function UserRow({ user, onChange }: { user: AdminUser; onChange: (u: AdminUser)
         </div>
         <span className="font-display text-ink text-2xl tabular-nums">{user.balance} ток.</span>
       </div>
-      <div className="flex flex-wrap items-end gap-2">
-        <input
-          aria-label={`Токены для ${user.name}`}
-          inputMode="numeric"
-          placeholder="+100 или -50"
-          value={delta}
-          onChange={(e) => setDelta(e.target.value.replace(/[^\d-]/g, ''))}
-          className="bg-canvas-sunken text-ink border-line-strong min-h-11 w-32 border-b-2 px-3"
-        />
-        <input
-          aria-label="Комментарий"
-          placeholder="Комментарий"
-          value={note}
-          maxLength={200}
-          onChange={(e) => setNote(e.target.value)}
-          className="bg-canvas-sunken text-ink border-line-strong min-h-11 min-w-0 flex-1 border-b-2 px-3"
-        />
-        <StudioButton variant="outline" disabled={!Number(delta)} onClick={() => void tokens()}>
-          Изменить баланс
-        </StudioButton>
-      </div>
+      <TokensPanel user={user} onChange={onChange} />
       <div className="flex flex-wrap gap-2">
         <StudioButton
           variant="quiet"
@@ -318,7 +428,7 @@ function TariffEditor({
 
   const num = (v: string) => Number(v.replace(/\D/g, '') || 0)
   return (
-    <li className="chamfer-sm bg-canvas-raised grid gap-3 p-4">
+    <li className="chamfer-sm bg-canvas-raised grid min-w-0 gap-3 p-4 [&>*]:min-w-0">
       <div className="grid gap-3 sm:grid-cols-3">
         {isNew ? (
           <TextField
@@ -2288,7 +2398,7 @@ export function AdminPage() {
     )
 
   return (
-    <div className="mx-auto grid max-w-5xl gap-6 px-4 pt-6 pb-16 md:px-6">
+    <div className="mx-auto grid w-full max-w-5xl gap-6 px-4 pt-6 pb-16 md:px-6 [&>*]:min-w-0">
       <div className="grid gap-2">
         <p className="text-caption tracking-label text-ink-muted uppercase">Админка</p>
         <h1 className="font-display text-title text-ink text-[2rem]">Управление студией</h1>

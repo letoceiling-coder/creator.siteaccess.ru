@@ -3,6 +3,7 @@ import { videoTemplates } from '@/features/catalog/video-data.ts'
 import { AnimatePresence, motion } from 'motion/react'
 import { useMemo, useState } from 'react'
 import { ApertureTabs } from '@/components/studio/aperture-tabs.tsx'
+import { MediaLightbox } from '@/components/studio/media-lightbox.tsx'
 import { PosterCard } from '@/components/studio/poster-card.tsx'
 import { ActionBar } from '@/components/studio/action-bar.tsx'
 import { MoreButton } from '@/components/studio/more-button.tsx'
@@ -350,6 +351,7 @@ export function ScenarioScreen({
   scenario: Scenario
   onCreate: () => void
 }) {
+  const [view, setView] = useState<number>()
   return (
     <div className="md:grid md:grid-cols-2 md:items-start md:gap-12 md:px-6 md:pt-6">
       <div className="relative aspect-[4/5] overflow-hidden">
@@ -390,11 +392,25 @@ export function ScenarioScreen({
                 transition={{ ...enter, delay: 0.3 + i * 0.07 }}
                 className="chamfer-sm w-32 shrink-0 snap-start"
               >
-                <img src={src} alt="" className="aspect-[3/4] size-full object-cover" />
+                <button
+                  type="button"
+                  onClick={() => setView(i)}
+                  aria-label={`Пример кадра ${i + 1} на весь экран`}
+                  className="block w-full"
+                >
+                  <img src={src} alt="" className="aspect-[3/4] size-full object-cover" />
+                </button>
               </motion.div>
             ))}
           </div>
         </div>
+
+        <MediaLightbox
+          items={scenario.gallery.map((src) => ({ kind: 'photo' as const, src }))}
+          index={view}
+          onIndex={setView}
+          label={`${scenario.title}: примеры кадров`}
+        />
 
         <dl className="border-line grid grid-cols-3 border-y py-4 text-center">
           {[

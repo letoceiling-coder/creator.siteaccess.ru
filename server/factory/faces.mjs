@@ -143,7 +143,8 @@ export async function videoFaceRatio(video, minFaces = 1, refs = []) {
     refs,
   )
   if (!results.length) return { ratio: 0, frames: 0, bad: [], similarity: 0, sameRatio: 0 }
-  const good = results.filter((r) => r.ok).length
+  // Кадр хороший, если лицо видно целиком и в кадре нет лишних людей.
+  const good = results.filter((r) => r.ok && (r.people ?? minFaces) <= minFaces).length
   const sims = results.map((r) => r.similarity ?? 0)
   return {
     ratio: good / results.length,

@@ -132,4 +132,38 @@ test.describe('redo after generation', () => {
     await expect(page.getByRole('button', { name: 'Переделать', exact: true })).toHaveCount(0)
     expect(downloaded).toBe(true)
   })
+
+  test('result photos open full screen; download from the viewer closes redo', async ({ page }) => {
+    await base(page)
+    let downloaded = false
+    await page.route(`**/api/jobs/${jobId}`, (route) =>
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify(doneJob({ canRedo: !downloaded, downloaded })),
+      }),
+    )
+    await page.route(`**/api/jobs/${jobId}/downloaded`, async (route) => {
+      downloaded = true
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify(doneJob({ canRedo: false, downloaded: true })),
+      })
+    })
+    await page.goto(`/jobs/${jobId}`, { waitUntil: 'domcontentloaded' })
+    await page.getByRole('button', { name: 'Открыть кадр 2 на весь экран' }).click()
+    const viewer = page.getByRole('dialog')
+    await expect(viewer.getByText('2 / 5 · Кадр 2')).toBeVisible()
+    await page.keyboard.press('ArrowRight')
+    await expect(viewer.getByText('3 / 5 · Кадр 3')).toBeVisible()
+    await expect(viewer.getByRole('link', { name: 'Скачать' })).toHaveAttribute(
+      'href',
+      `/media/jobs/${jobId}/3.jpg`,
+    )
+    const download = page.waitForEvent('download')
+    await viewer.getByRole('link', { name: 'Скачать' }).click()
+    await download
+    await page.keyboard.press('Escape')
+    await expect(page.getByText('бесплатная переделка больше недоступна')).toBeVisible()
+    expect(downloaded).toBe(true)
+  })
 })

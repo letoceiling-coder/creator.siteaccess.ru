@@ -37,15 +37,25 @@ export function photoPlan(target, options) {
   const light = lighting[options.time] ?? lighting.day
   return directShots(loc.id, loc.props).map((shot, i) => ({
     type: 'photo',
+    negativeExtra: extraPeopleNegative,
     name: shot.name,
     width: 1104,
     height: 1472,
     seed: 70_000 + i * 97,
-    prompt: `${shot.camera}. Subject: the person from the reference photos${outfit ? `, ${outfit}` : ''}, ${shot.pose}. Location: ${loc.scene}. Light: ${light}. Palette: ${loc.palette}. ${faceVisible} ${identity} ${camera}.`,
+    prompt: `${shot.camera}. Subject: the person from the reference photos${outfit ? `, ${outfit}` : ''}, ${shot.pose}. Location: ${loc.scene}. Light: ${light}. Palette: ${loc.palette}. ${onlyOne} ${faceVisible} ${identity} ${camera}.`,
   }))
 }
 
 /** Лицо целиком в кадре: без этого ролик и фото отбраковываются проверкой. */
+/** В кадре только сам пользователь — без лишних людей, отражений и двойников. */
+export const onlyOne =
+  'Only one person in the frame: the person is alone, no other people anywhere in the frame, no duplicates or reflections of the person.'
+const onlyTwo =
+  'Exactly two people in the frame — these two people only, no other people anywhere in the frame.'
+/** Негатив против лишних людей (для одного героя). */
+export const extraPeopleNegative =
+  'extra people, second person, another person, crowd, couple, group of people, duplicate person, twin, clone, people in the background'
+
 export const faceVisible =
   'The face is clearly visible and turned toward the camera, the whole head is fully inside the frame with headroom above it.'
 const facesVisible =
@@ -85,7 +95,8 @@ export function videoPlan(target, options) {
         width: sz.still[0],
         height: sz.still[1],
         seed: 81_000 + i * 131,
-        prompt: `Cinematic film still: ${beat.still}. ${subject}. ${pair ? facesVisible : faceVisible} ${pair ? pairIdentity : identity} ${style}`,
+        negativeExtra: pair ? undefined : extraPeopleNegative,
+        prompt: `Cinematic film still: ${beat.still}. ${subject}. ${pair ? onlyTwo : onlyOne} ${pair ? facesVisible : faceVisible} ${pair ? pairIdentity : identity} ${style}`,
       },
       video: {
         width: sz.video[0],
@@ -149,11 +160,12 @@ function customPlan(kind, target) {
   if (kind === 'photo')
     return sc.plan.shots.map((shot, i) => ({
       type: 'photo',
+      negativeExtra: extraPeopleNegative,
       name: `Кадр ${i + 1}`,
       width: 1104,
       height: 1472,
       seed: 70_000 + i * 97,
-      prompt: `${shot.en}. Subject: the person from the reference photos. ${faceVisible} ${identity} ${camera}.`,
+      prompt: `${shot.en}. Subject: the person from the reference photos. ${onlyOne} ${faceVisible} ${identity} ${camera}.`,
     }))
   if (kind === 'video') {
     const sz = sizes['9:16']
@@ -168,7 +180,8 @@ function customPlan(kind, target) {
           width: sz.still[0],
           height: sz.still[1],
           seed: 81_000 + i * 131,
-          prompt: `Cinematic film still: ${shot.still}. Subject: the person from the reference photos. ${faceVisible} ${identity} ${style}`,
+          negativeExtra: extraPeopleNegative,
+          prompt: `Cinematic film still: ${shot.still}. Subject: the person from the reference photos. ${onlyOne} ${faceVisible} ${identity} ${style}`,
         },
         video: {
           width: sz.video[0],
@@ -203,7 +216,9 @@ export function applyFixes(kind, plan, fixes) {
         ...shot,
         prompt: add(shot.prompt, i),
         seed: shot.seed + shift,
-        negativeExtra: neg(i),
+        negativeExtra: [shot.negativeExtra ?? shot.still?.negativeExtra, neg(i)]
+          .filter(Boolean)
+          .join(', '),
         strict,
       }))
       .filter((_, i) => keep.includes(i))
@@ -217,7 +232,9 @@ export function applyFixes(kind, plan, fixes) {
           ...shot.still,
           prompt: add(shot.still.prompt, i),
           seed: shot.still.seed + shift,
-          negativeExtra: neg(i),
+          negativeExtra: [shot.negativeExtra ?? shot.still?.negativeExtra, neg(i)]
+            .filter(Boolean)
+            .join(', '),
           strict,
         },
         video: {

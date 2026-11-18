@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { MediaLightbox } from '@/components/studio/media-lightbox.tsx'
 import { PosterCard } from '@/components/studio/poster-card.tsx'
 import { Modal } from '@/components/ui/modal.tsx'
 import { MoreButton } from '@/components/studio/more-button.tsx'
@@ -7,6 +8,7 @@ import { usePaged } from '@/hooks/use-paged.ts'
 
 /** Образцы локаций: 30 мест по 5 кадров. Все изображения созданы ИИ. */
 export function LocationsGallery() {
+  const [view, setView] = useState<number>()
   const { photos } = useMedia()
   const [open, setOpen] = useState<PhotoLocation | undefined>()
   const page = usePaged(photos, 10)
@@ -49,21 +51,38 @@ export function LocationsGallery() {
       />
       <Modal open={Boolean(open)} title={open?.title ?? ''} onClose={() => setOpen(undefined)}>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {open?.shots.map((shot) => (
+          {open?.shots.map((shot, i) => (
             <figure key={shot.kind} className="chamfer-sm grid gap-1">
-              <img
-                src={shot.src}
-                alt={`${open.title}: ${shot.label}`}
-                loading="lazy"
-                width={shot.w}
-                height={shot.h}
-                className="aspect-[3/4] w-full object-cover"
-              />
+              <button
+                type="button"
+                onClick={() => setView(i)}
+                aria-label={`${shot.label} на весь экран`}
+                className="block w-full"
+              >
+                <img
+                  src={shot.src}
+                  alt={`${open.title}: ${shot.label}`}
+                  loading="lazy"
+                  width={shot.w}
+                  height={shot.h}
+                  className="aspect-[3/4] w-full object-cover"
+                />
+              </button>
               <figcaption className="text-caption text-ink-muted">{shot.label}</figcaption>
             </figure>
           ))}
         </div>
       </Modal>
+      <MediaLightbox
+        items={(open?.shots ?? []).map((s) => ({
+          kind: 'photo' as const,
+          src: s.src,
+          label: s.label,
+        }))}
+        index={view}
+        onIndex={setView}
+        label={`${open?.title ?? 'Локация'}: просмотр`}
+      />
     </section>
   )
 }

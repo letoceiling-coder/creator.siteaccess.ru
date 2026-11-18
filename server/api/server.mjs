@@ -256,6 +256,11 @@ async function createJob(req, res, sessionUser) {
         } catch (error) {
           log(`проверка лица недоступна: ${error.message}`)
         }
+        if (face.ok && (face.people ?? 1) > 1)
+          throw new HttpError(
+            422,
+            `На фото ${i + 1} несколько человек. Выберите снимок, где в кадре только вы — иначе в результат попадут чужие лица.`,
+          )
         if (!face.ok)
           throw new HttpError(
             422,
@@ -315,7 +320,7 @@ async function handle(req, res) {
   if (path.startsWith('/api/rewards')) return channels.handleRewards(req, res, path, user)
   if (scenarios.owns(path)) return scenarios.handle(req, res, path, user)
   if (path.startsWith('/api/bots/') || path.startsWith('/api/auth/link')) {
-    await bots.handle(req, res, path)
+    await bots.handle(req, res, path, user)
     if (res.headersSent) return
   }
   if ((await handleAuth(req, res, path, url, user)) !== undefined || res.headersSent) return

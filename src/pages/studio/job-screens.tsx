@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { ActionBar } from '@/components/studio/action-bar.tsx'
 import { ApertureTabs } from '@/components/studio/aperture-tabs.tsx'
 import { FilmProgress } from '@/components/studio/film-progress.tsx'
+import { MediaLightbox } from '@/components/studio/media-lightbox.tsx'
 import { IrisLoader } from '@/components/studio/iris-loader.tsx'
 import { StudioButton } from '@/components/studio/studio-button.tsx'
 import { UploadSlot } from '@/components/studio/upload-slot.tsx'
@@ -589,6 +590,7 @@ export function JobScreen({
 }) {
   const { job, setJob, error, missing } = useJob(jobId)
   const [cancelling, setCancelling] = useState(false)
+  const [view, setView] = useState<number>()
 
   if (missing) {
     return (
@@ -630,6 +632,9 @@ export function JobScreen({
   }
 
   const working = job.status === 'queued' || job.status === 'running'
+  const photos = job.results
+    .filter((r) => r.type === 'photo')
+    .map((r) => ({ kind: 'photo' as const, src: r.src, download: r.download, label: r.label }))
   // Скачивание закрывает бесплатную переделку: отмечаем на сервере.
   const noteDownload = () => {
     if (job.downloaded) return
@@ -707,14 +712,21 @@ export function JobScreen({
                     transition={{ delay: i * 0.1, duration: 0.3 }}
                     className="chamfer-sm relative"
                   >
-                    <img
-                      src={r.src}
-                      alt={`Кадр ${i + 1}`}
-                      width={r.width}
-                      height={r.height}
-                      style={{ animationDelay: `${i * 0.12}s` }}
-                      className="develop aspect-[3/4] size-full object-cover"
-                    />
+                    <button
+                      type="button"
+                      onClick={() => setView(photos.findIndex((p) => p.src === r.src))}
+                      aria-label={`Открыть кадр ${i + 1} на весь экран`}
+                      className="block w-full"
+                    >
+                      <img
+                        src={r.src}
+                        alt={`Кадр ${i + 1}`}
+                        width={r.width}
+                        height={r.height}
+                        style={{ animationDelay: `${i * 0.12}s` }}
+                        className="develop aspect-[3/4] size-full object-cover"
+                      />
+                    </button>
                     {r.label ? (
                       <figcaption className="tracking-label absolute top-2 left-2 bg-black/50 px-2 py-1 text-[11px] text-white uppercase backdrop-blur-sm">
                         {r.label}
@@ -735,6 +747,13 @@ export function JobScreen({
                 ),
               )}
             </div>
+            <MediaLightbox
+              items={photos}
+              index={view}
+              onIndex={setView}
+              label={`${title}: просмотр`}
+              onDownload={noteDownload}
+            />
             {job.isRedo && job.redoNote ? (
               <Alert tone="info" title="Переделка">
                 {job.redoNote}
@@ -833,6 +852,7 @@ const reasonTitle: Record<string, string> = {
   refund: 'Возврат',
   admin: 'Начисление',
   purchase: 'Покупка',
+  subscribe: 'Подписка на канал',
 }
 
 interface WalletRow {

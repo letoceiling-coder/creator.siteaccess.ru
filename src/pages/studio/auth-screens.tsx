@@ -59,7 +59,10 @@ function BotLogin({
     }
     void (async () => {
       try {
-        const res = await apiFetch('/api/auth/link/start', jsonInit('POST', { platform }))
+        const res = await apiFetch(
+          '/api/auth/link/start',
+          jsonInit('POST', { platform, ref: savedRef() }),
+        )
         const body = (await res.json()) as { code?: string; url?: string; error?: string }
         if (!res.ok || !body.code || !body.url)
           throw new Error(body.error ?? 'Не удалось начать вход')

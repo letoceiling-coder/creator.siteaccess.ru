@@ -180,12 +180,16 @@ export function startWorker({ q, config, log, onFinish = () => {} }) {
         index,
         upscale,
       )
-      const id = await identity(buf, ref.refs, minFaces)
+      const raw = await identity(buf, ref.refs, minFaces)
+      // Лишние люди в кадре — брак, как и обрезанное лицо.
+      const crowded = (raw.people ?? minFaces) > minFaces
+      const id = crowded ? { ...raw, ok: false, reason: 'extra_people' } : raw
       const similarity = id.similarity ?? (id.ok ? 1 : 0)
       const score = (id.ok ? 1 : 0) + similarity
       record.attempts.push({
         seed: shot.seed + attempt * 1009,
-        faceVisible: Boolean(id.ok),
+        faceVisible: Boolean(raw.ok),
+        people: raw.people,
         similarity: Number(similarity.toFixed(3)),
         reason: id.ok ? undefined : id.reason,
       })

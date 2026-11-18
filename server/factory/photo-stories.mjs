@@ -695,7 +695,7 @@ const rows = [
     'speaker-stage',
     'Спикер на сцене',
     'business',
-    'a conference stage with a big screen and audience silhouettes',
+    'a conference stage with a big screen and soft stage lights',
     'stage blue and spotlight white',
     'a microphone',
     'a high stool on stage',
