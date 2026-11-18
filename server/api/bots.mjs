@@ -3,7 +3,7 @@
  * вход на сайте через бота — пользователь подтверждает вход кнопкой в мессенджере.
  *
  * Telegram API недоступен с сервера напрямую: запросы идут через HTTP-прокси TELEGRAM_PROXY
- * (на сервере — tor, 127.0.0.1:8118). Входящие вебхуки Telegram доходят напрямую.
+ * (на сервере — http://31.207.5.233:8888). Входящие вебхуки Telegram доходят напрямую.
  * MAX: заголовок Authorization с токеном; адрес API — MAX_API_URL.
  */
 import { execFile } from 'node:child_process'
@@ -59,7 +59,7 @@ export function botsModule({ db, accounts, config, log }) {
 
   /* ── Telegram ── */
 
-  async function tg(method, body = {}) {
+  async function tg(method, body = {}, timeoutSec = 25) {
     const token = integrations().telegram.botToken
     if (!token) throw new Error('Не задан токен бота Telegram')
     const url = `${TELEGRAM_API}/bot${token}/${method}`
@@ -67,7 +67,7 @@ export function botsModule({ db, accounts, config, log }) {
     const args = [
       '-s',
       '-m',
-      '25',
+      String(timeoutSec),
       '-K',
       '-',
       '-H',
@@ -91,14 +91,60 @@ export function botsModule({ db, accounts, config, log }) {
 
   const tgWebApp = (path = '/telegram') => ({ url: `${config.publicUrl}${path}` })
 
+  /**
+   * Приём сообщений Telegram. Хостинг в РФ: Telegram не достучится до вебхука, поэтому по
+   * умолчанию сервер сам забирает обновления (getUpdates) через прокси. TELEGRAM_MODE=webhook —
+   * если сервер доступен из Telegram.
+   */
+  const TELEGRAM_MODE = process.env.TELEGRAM_MODE ?? 'polling'
+  const polling = { active: false, lastOk: 0, lastError: '', offset: 0, token: '' }
+
+  async function pollLoop() {
+    if (polling.active) return
+    polling.active = true
+    while (polling.active) {
+      const cfg = integrations().telegram
+      if (!cfg.enabled || !cfg.botToken || cfg.webhookFor !== sha(cfg.botToken).slice(0, 16)) {
+        await new Promise((r) => setTimeout(r, 15_000))
+        continue
+      }
+      if (polling.token !== cfg.botToken) {
+        polling.token = cfg.botToken
+        polling.offset = 0
+      }
+      try {
+        const updates = await tg(
+          'getUpdates',
+          { offset: polling.offset, timeout: 25, allowed_updates: ['message', 'callback_query'] },
+          40,
+        )
+        polling.lastOk = Date.now()
+        polling.lastError = ''
+        for (const update of updates) {
+          polling.offset = update.update_id + 1
+          await telegramUpdate(update).catch((e) => log(`Telegram: ${e.message}`))
+        }
+      } catch (error) {
+        polling.lastError = error.message
+        log(`Telegram getUpdates: ${error.message}`)
+        await new Promise((r) => setTimeout(r, 5_000))
+      }
+    }
+  }
+
   async function telegramSetup() {
     const token = integrations().telegram.botToken
-    await tg('setWebhook', {
-      url: `${config.publicUrl}/api/bots/telegram/webhook`,
-      secret_token: webhookSecret(token),
-      allowed_updates: ['message', 'callback_query'],
-      drop_pending_updates: true,
-    })
+    if (TELEGRAM_MODE === 'webhook') {
+      await tg('setWebhook', {
+        url: `${config.publicUrl}/api/bots/telegram/webhook`,
+        secret_token: webhookSecret(token),
+        allowed_updates: ['message', 'callback_query'],
+        drop_pending_updates: true,
+      })
+    } else {
+      // Вебхук мешает getUpdates — снимаем; накопившиеся сообщения не теряем.
+      await tg('deleteWebhook', { drop_pending_updates: false })
+    }
     await tg('setChatMenuButton', {
       menu_button: { type: 'web_app', text: 'Студия', web_app: tgWebApp() },
     })
@@ -113,12 +159,17 @@ export function botsModule({ db, accounts, config, log }) {
       tg('getWebhookInfo'),
       tg('getChatMenuButton'),
     ])
+    const polled = TELEGRAM_MODE !== 'webhook'
     return {
       username: me.username,
+      mode: polled ? 'polling' : 'webhook',
       webhook: hook.url || '',
-      webhookOk: hook.url === `${config.publicUrl}/api/bots/telegram/webhook`,
+      // «Приём сообщений работает»: вебхук указывает на студию или опрос через прокси отвечает.
+      webhookOk: polled
+        ? !hook.url && polling.active && Date.now() - polling.lastOk < 90_000
+        : hook.url === `${config.publicUrl}/api/bots/telegram/webhook`,
       pending: hook.pending_update_count ?? 0,
-      lastError: hook.last_error_message ?? undefined,
+      lastError: (polled ? polling.lastError : hook.last_error_message) || undefined,
       menuButton: menu.type === 'web_app' ? menu.web_app?.url : menu.type,
       miniAppOk: menu.type === 'web_app' && menu.web_app?.url === tgWebApp().url,
     }
@@ -322,6 +373,13 @@ export function botsModule({ db, accounts, config, log }) {
 
   return {
     linkReady,
+    /** Запуск приёма сообщений Telegram опросом (вызывается сервером при старте). */
+    startTelegram() {
+      if (TELEGRAM_MODE !== 'webhook') void pollLoop()
+    },
+    stopTelegram() {
+      polling.active = false
+    },
     async handle(req, res, path) {
       const method = req.method
 

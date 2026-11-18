@@ -557,6 +557,7 @@ interface BotsStatus {
   telegram: {
     error?: string
     username?: string
+    mode?: 'polling' | 'webhook'
     webhookOk?: boolean
     lastError?: string
     menuButton?: string
@@ -639,12 +640,16 @@ function BotPanel({ platform }: { platform: 'telegram' | 'max' }) {
           <Flag ok label={`Бот @${status!.telegram.username}`} />
           <Flag
             ok={status!.telegram.webhookOk}
-            label="Вебхук на студию (ответы на /start, вход через бота)"
+            label={
+              status!.telegram.mode === 'polling'
+                ? 'Приём сообщений через прокси (ответы на /start, вход через бота)'
+                : 'Вебхук на студию (ответы на /start, вход через бота)'
+            }
           />
           <Flag ok={status!.telegram.miniAppOk} label="Кнопка мини-приложения в чате с ботом" />
           {status!.telegram.lastError ? (
             <li className="text-caption text-danger">
-              Последняя ошибка вебхука: {status!.telegram.lastError}
+              Последняя ошибка: {status!.telegram.lastError}
             </li>
           ) : null}
         </ul>

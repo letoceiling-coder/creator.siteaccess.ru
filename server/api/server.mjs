@@ -81,6 +81,7 @@ function ipOf(req) {
 
 const payments = paymentsModule({ db, accounts, config, log })
 const bots = botsModule({ db, accounts, config, log })
+if (env.WORKER !== 'off') bots.startTelegram()
 const handleAuth = authRoutes({ accounts, config, log, ipOf, payments, bots })
 const handleAdmin = adminRoutes({ accounts, db, q, log, payments, bots })
 
@@ -330,6 +331,7 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
   process.on(signal, () => {
     log('остановка')
     worker.stop()
+    bots.stopTelegram()
     server.close(() => process.exit(0))
     setTimeout(() => process.exit(0), 5_000).unref()
   })
