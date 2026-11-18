@@ -1,10 +1,11 @@
-import { ArrowLeft, Film, Home, Images, Moon, Sun, User } from 'lucide-react'
+import { ArrowLeft, Coins, Film, Home, Images, Moon, Sun, User } from 'lucide-react'
 import { motion } from 'motion/react'
 import { Suspense } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router'
 import { useTheme } from '@/app/use-theme.ts'
 import { Dock, type DockItem } from '@/components/studio/dock.tsx'
 import { IrisLoader } from '@/components/studio/iris-loader.tsx'
+import { useSession } from '@/features/auth/session.ts'
 import { usePaths } from '@/features/platform/use-paths.ts'
 import { usePlatform } from '@/features/platform/use-platform.ts'
 import { cn } from '@/shared/cn.ts'
@@ -36,6 +37,7 @@ export function AppFrame() {
   const platform = usePlatform()
   const paths = usePaths()
   const { theme, toggleTheme } = useTheme()
+  const session = useSession()
   const location = useLocation()
   const navigate = useNavigate()
 
@@ -129,19 +131,38 @@ export function AppFrame() {
               ))}
             </nav>
           ) : null}
-          <button
-            type="button"
-            className="text-ink hover:bg-wash transition-studio grid size-11 place-items-center"
-            aria-pressed={theme === 'dark'}
-            aria-label={theme === 'dark' ? 'Включить светлую тему' : 'Включить тёмную тему'}
-            onClick={toggleTheme}
-          >
-            {theme === 'dark' ? (
-              <Sun aria-hidden="true" size={18} />
-            ) : (
-              <Moon aria-hidden="true" size={18} />
-            )}
-          </button>
+          <div className="flex items-center gap-1">
+            {session.status === 'user' && session.me ? (
+              <Link
+                to={paths.cabinet}
+                className="chamfer-sm bg-canvas-raised text-ink hover:bg-canvas-overlay inline-flex min-h-11 items-center gap-2 px-3 tabular-nums transition-colors duration-[140ms]"
+                aria-label={`Баланс: ${session.me.user.balance} токенов`}
+              >
+                <Coins size={16} className="text-accent" aria-hidden="true" />
+                {session.me.user.balance}
+              </Link>
+            ) : session.status === 'guest' ? (
+              <Link
+                to={paths.login}
+                className="text-accent hover:bg-wash inline-flex min-h-11 items-center px-3 font-medium"
+              >
+                Войти
+              </Link>
+            ) : null}
+            <button
+              type="button"
+              className="text-ink hover:bg-wash transition-studio grid size-11 place-items-center"
+              aria-pressed={theme === 'dark'}
+              aria-label={theme === 'dark' ? 'Включить светлую тему' : 'Включить тёмную тему'}
+              onClick={toggleTheme}
+            >
+              {theme === 'dark' ? (
+                <Sun aria-hidden="true" size={18} />
+              ) : (
+                <Moon aria-hidden="true" size={18} />
+              )}
+            </button>
+          </div>
         </div>
       </header>
       <main

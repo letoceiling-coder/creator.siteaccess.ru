@@ -1,4 +1,7 @@
 import { z } from 'zod'
+import { ApiError, apiFetch, parse } from '@/features/auth/http.ts'
+
+export { ApiError }
 
 export type JobKind = 'photo' | 'video' | 'animate'
 export type TimeOfDay = 'day' | 'dusk' | 'night'
@@ -23,12 +26,13 @@ const jobSchema = z.object({
   position: z.number(),
   results: z.array(resultSchema),
   error: z.string().optional(),
+  cost: z.number().optional(),
+  refunded: z.boolean().optional(),
   createdAt: z.number(),
   finishedAt: z.number().optional(),
 })
 
-const createdSchema = z.object({ id: z.string(), token: z.string(), position: z.number() })
-const errorSchema = z.object({ error: z.string() })
+const createdSchema = z.object({ id: z.string(), position: z.number(), cost: z.number() })
 
 export type Job = z.infer<typeof jobSchema>
 export type JobResult = z.infer<typeof resultSchema>
@@ -37,63 +41,6 @@ export const finalStatuses: Job['status'][] = ['done', 'failed', 'cancelled', 'e
 
 export const MAX_PHOTO_BYTES = 15 * 1024 * 1024
 export const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp']
-
-export class ApiError extends Error {}
-
-/* ── Задачи этого устройства: id и токен доступа. Входа пока нет, токен — ключ к задаче. ── */
-
-export interface LocalJob {
-  id: string
-  token: string
-  kind: JobKind
-  target: string
-  createdAt: number
-}
-
-const storageKey = 'creator.jobs.v1'
-
-export function localJobs(): LocalJob[] {
-  try {
-    const raw = window.localStorage.getItem(storageKey)
-    const list = raw ? (JSON.parse(raw) as LocalJob[]) : []
-    return Array.isArray(list) ? list : []
-  } catch {
-    return []
-  }
-}
-
-function remember(job: LocalJob) {
-  try {
-    const list = [job, ...localJobs().filter((j) => j.id !== job.id)].slice(0, 50)
-    window.localStorage.setItem(storageKey, JSON.stringify(list))
-  } catch {
-    // Хранилище недоступно (приватный режим): задача живёт, пока открыта вкладка.
-  }
-}
-
-const memory = new Map<string, LocalJob>()
-
-export function localJob(id: string): LocalJob | undefined {
-  return memory.get(id) ?? localJobs().find((j) => j.id === id)
-}
-
-/* ── Запросы ── */
-
-async function parse<T>(res: Response, schema: z.ZodType<T>): Promise<T> {
-  let body: unknown
-  try {
-    body = await res.json()
-  } catch {
-    throw new ApiError('Сервер недоступен. Проверьте соединение и попробуйте ещё раз.')
-  }
-  if (!res.ok) {
-    const parsed = errorSchema.safeParse(body)
-    throw new ApiError(parsed.success ? parsed.data.error : 'Не удалось выполнить запрос')
-  }
-  const parsed = schema.safeParse(body)
-  if (!parsed.success) throw new ApiError('Неожиданный ответ сервера')
-  return parsed.data
-}
 
 export interface CreateJobInput {
   kind: JobKind
@@ -105,7 +52,8 @@ export interface CreateJobInput {
   photos: File[]
 }
 
-export async function createJob(input: CreateJobInput): Promise<LocalJob & { position: number }> {
+/** Задача создаётся от имени вошедшего пользователя; токены списываются на сервере. */
+export async function createJob(input: CreateJobInput) {
   const form = new FormData()
   form.append('kind', input.kind)
   form.append('target', input.target)
@@ -114,39 +62,20 @@ export async function createJob(input: CreateJobInput): Promise<LocalJob & { pos
   if (input.duration) form.append('duration', String(input.duration))
   form.append('consent', 'yes')
   for (const photo of input.photos) form.append('photos', photo, photo.name)
-  let res: Response
-  try {
-    res = await fetch('/api/jobs', { method: 'POST', body: form })
-  } catch {
-    throw new ApiError('Нет соединения с сервером. Попробуйте ещё раз.')
-  }
-  const created = await parse(res, createdSchema)
-  const job: LocalJob = {
-    id: created.id,
-    token: created.token,
-    kind: input.kind,
-    target: input.target,
-    createdAt: Date.now(),
-  }
-  memory.set(job.id, job)
-  remember(job)
-  return { ...job, position: created.position }
+  return parse(await apiFetch('/api/jobs', { method: 'POST', body: form }), createdSchema)
 }
 
-export async function getJob(local: LocalJob): Promise<Job> {
-  const res = await fetch(`/api/jobs/${local.id}`, {
-    headers: { authorization: `Bearer ${local.token}` },
-    cache: 'no-store',
-  })
-  return parse(res, jobSchema)
+export async function getJob(id: string): Promise<Job> {
+  return parse(await apiFetch(`/api/jobs/${id}`, { cache: 'no-store' }), jobSchema)
 }
 
-export async function cancelJob(local: LocalJob): Promise<Job> {
-  const res = await fetch(`/api/jobs/${local.id}/cancel`, {
-    method: 'POST',
-    headers: { authorization: `Bearer ${local.token}` },
-  })
-  return parse(res, jobSchema)
+export async function cancelJob(id: string): Promise<Job> {
+  return parse(await apiFetch(`/api/jobs/${id}/cancel`, { method: 'POST' }), jobSchema)
+}
+
+export async function listJobs(): Promise<Job[]> {
+  const res = await apiFetch('/api/jobs', { cache: 'no-store' })
+  return (await parse(res, z.object({ jobs: z.array(jobSchema) }))).jobs
 }
 
 /** Проверка файла до отправки: тип и размер. Сервер проверяет ещё раз по содержимому. */

@@ -64,4 +64,6 @@ export interface PlatformAdapter {
   signalReady: () => void
   close: () => void
   bindBack: (handler: () => void) => () => void
+  /** Подписанные данные запуска мини-приложения — для входа без пароля. */
+  getInitData: () => string | undefined
 }

@@ -17,6 +17,7 @@ export function createBrowserAdapter(viewportHeight: number | null): PlatformAda
     signalReady: () => undefined,
     close: () => undefined,
     bindBack: () => () => undefined,
+    getInitData: () => undefined,
   }
 }
 
@@ -35,6 +36,7 @@ export function createTelegramAdapter(input: AdapterInput): PlatformAdapter {
       host?.close()
     },
     bindBack: (handler) => bindHostBack(host?.BackButton, handler),
+    getInitData: () => host?.initData || undefined,
   }
 }
 
@@ -52,5 +54,6 @@ export function createMaxAdapter(input: AdapterInput): PlatformAdapter {
       host?.close()
     },
     bindBack: (handler) => bindHostBack(host?.BackButton, handler),
+    getInitData: () => host?.initData || undefined,
   }
 }

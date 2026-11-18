@@ -1,4 +1,5 @@
-import { useNavigate, useParams } from 'react-router'
+import { useCallback } from 'react'
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
 import { Alert } from '@/components/ui/alert.tsx'
 import { scenarios } from '@/features/catalog/data.ts'
 import { findScenario } from '@/features/catalog/photo-data.ts'
@@ -7,6 +8,7 @@ import type { JobKind } from '@/features/jobs/api.ts'
 import { motions } from '@/features/jobs/motions.ts'
 import { useMedia } from '@/features/media/use-media.ts'
 import { usePaths } from '@/features/platform/use-paths.ts'
+import { LoginScreen, TelegramCallbackScreen } from './auth-screens.tsx'
 import { CabinetScreen, JobScreen, WizardScreen, type CreateTarget } from './job-screens.tsx'
 import { CatalogScreen, HomeScreen, ScenarioScreen } from './screens.tsx'
 import { VideoCatalogScreen, VideoDetailScreen } from './video-screens.tsx'
@@ -52,6 +54,17 @@ function useDescribe() {
   }
 }
 
+/** Переход на вход с возвратом на текущую страницу. */
+function useLoginRedirect() {
+  const navigate = useNavigate()
+  const location = useLocation()
+  const paths = usePaths()
+  return useCallback(
+    () => void navigate(`${paths.login}?return=${encodeURIComponent(location.pathname)}`),
+    [navigate, location.pathname, paths.login],
+  )
+}
+
 export function HomePage() {
   const navigate = useNavigate()
   const paths = usePaths()
@@ -60,6 +73,7 @@ export function HomePage() {
       onOpen={(id) => void navigate(paths.photo(id))}
       onCatalog={() => void navigate(paths.photos)}
       onVideo={() => void navigate(paths.video)}
+      onOpenVideo={(id) => void navigate(paths.videoItem(id))}
     />
   )
 }
@@ -81,6 +95,7 @@ export function ScenarioPage() {
 }
 
 export function CreatePage() {
+  const toLogin = useLoginRedirect()
   const scenario = useScenario()
   const navigate = useNavigate()
   const paths = usePaths()
@@ -98,11 +113,14 @@ export function CreatePage() {
       target={target}
       onBack={() => void navigate(paths.photo(scenario.id))}
       onDone={(jobId) => void navigate(paths.job(jobId))}
+      onLogin={toLogin}
+      onWallet={() => void navigate(paths.cabinet)}
     />
   )
 }
 
 export function VideoCreatePage() {
+  const toLogin = useLoginRedirect()
   const template = useTemplate()
   const media = useMedia()
   const navigate = useNavigate()
@@ -126,11 +144,14 @@ export function VideoCreatePage() {
       target={target}
       onBack={() => void navigate(paths.videoItem(template.id))}
       onDone={(jobId) => void navigate(paths.job(jobId))}
+      onLogin={toLogin}
+      onWallet={() => void navigate(paths.cabinet)}
     />
   )
 }
 
 export function AnimatePage() {
+  const toLogin = useLoginRedirect()
   const navigate = useNavigate()
   const paths = usePaths()
   const target: CreateTarget = {
@@ -146,6 +167,8 @@ export function AnimatePage() {
       target={target}
       onBack={() => void navigate(paths.video)}
       onDone={(jobId) => void navigate(paths.job(jobId))}
+      onLogin={toLogin}
+      onWallet={() => void navigate(paths.cabinet)}
     />
   )
 }
@@ -200,6 +223,7 @@ export function VideoItemPage() {
 }
 
 export function CabinetPage() {
+  const toLogin = useLoginRedirect()
   const navigate = useNavigate()
   const paths = usePaths()
   const describe = useDescribe()
@@ -208,6 +232,32 @@ export function CabinetPage() {
       describe={describe}
       onOpen={(id) => void navigate(paths.job(id))}
       onCatalog={() => void navigate(paths.photos)}
+      onLogin={toLogin}
+      onAdmin={() => void navigate(paths.admin)}
     />
   )
+}
+
+export function LoginPage() {
+  const navigate = useNavigate()
+  const paths = usePaths()
+  const [params] = useSearchParams()
+  const returnTo = params.get('return') ?? paths.cabinet
+  const safe = returnTo.startsWith('/') && !returnTo.startsWith('//') ? returnTo : paths.cabinet
+  return (
+    <LoginScreen
+      returnTo={safe}
+      error={params.get('error') ?? undefined}
+      onDone={() => void navigate(safe, { replace: true })}
+    />
+  )
+}
+
+export function TelegramAuthPage() {
+  const navigate = useNavigate()
+  const [params] = useSearchParams()
+  const back = params.get('return') ?? '/cabinet'
+  const safe = back.startsWith('/') && !back.startsWith('//') ? back : '/cabinet'
+  const done = useCallback(() => void navigate(safe, { replace: true }), [navigate, safe])
+  return <TelegramCallbackScreen onDone={done} />
 }

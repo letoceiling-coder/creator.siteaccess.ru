@@ -19,6 +19,8 @@ export function usePaths() {
     videoCreate: (id: string) => `${base}/video/${id}/create`,
     animate: `${base}/video/animate`,
     cabinet: `${base}/cabinet`,
+    login: `${base}/login`,
+    admin: '/admin',
   }
 }
 

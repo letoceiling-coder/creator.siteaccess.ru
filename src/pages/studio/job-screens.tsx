@@ -16,14 +16,13 @@ import {
   createJob,
   finalStatuses,
   getJob,
-  localJob,
-  localJobs,
+  listJobs,
   PHOTO_TYPES,
   type Job,
   type JobKind,
-  type LocalJob,
   type TimeOfDay,
 } from '@/features/jobs/api.ts'
+import { priceOf, useSession } from '@/features/auth/session.ts'
 import { motions } from '@/features/jobs/motions.ts'
 import { cn } from '@/shared/cn.ts'
 
@@ -152,11 +151,16 @@ export function WizardScreen({
   target,
   onDone,
   onBack,
+  onLogin,
+  onWallet,
 }: {
   target: CreateTarget
   onDone: (jobId: string) => void
   onBack: () => void
+  onLogin: () => void
+  onWallet: () => void
 }) {
+  const session = useSession()
   const animate = target.kind === 'animate'
   const pair = target.people === 2
   const slots = animate ? 1 : pair ? 2 : 3
@@ -184,26 +188,25 @@ export function WizardScreen({
   function pick(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? [])
     event.target.value = ''
+    // Проверка и раскладка по слотам — синхронно, чтобы ошибки сразу попали на экран.
     const problems: string[] = []
-    setPhotos((current) => {
-      const next = [...current]
-      for (const file of files) {
-        const problem = checkPhoto(file)
-        if (problem) {
-          problems.push(problem)
-          continue
-        }
-        const free = next.findIndex((p) => !p)
-        if (free < 0) {
-          problems.push(slots === 1 ? 'Нужно одно фото' : 'Можно не больше трёх фото')
-          break
-        }
-        const url = URL.createObjectURL(file)
-        urls.current.add(url)
-        next[free] = { file, url }
+    const next = [...photos]
+    for (const file of files) {
+      const problem = checkPhoto(file)
+      if (problem) {
+        problems.push(problem)
+        continue
       }
-      return next
-    })
+      const free = next.findIndex((p) => !p)
+      if (free < 0) {
+        problems.push(slots === 1 ? 'Нужно одно фото' : 'Можно не больше трёх фото')
+        break
+      }
+      const url = URL.createObjectURL(file)
+      urls.current.add(url)
+      next[free] = { file, url }
+    }
+    setPhotos(next)
     setError(problems.length ? problems.join('. ') : undefined)
   }
 
@@ -220,7 +223,15 @@ export function WizardScreen({
     )
   }
 
+  const cost = priceOf(session.me, target.kind, animate ? duration : undefined)
+  const balance = session.me?.user.balance ?? 0
+  const short = cost !== undefined && balance < cost
+
   async function submit() {
+    if (session.status !== 'user') {
+      onLogin()
+      return
+    }
     setSending(true)
     setError(undefined)
     try {
@@ -232,6 +243,7 @@ export function WizardScreen({
         duration: animate ? duration : undefined,
         photos: photos.filter((p): p is Picked => Boolean(p)).map((p) => p.file),
       })
+      void session.refresh()
       onDone(job.id)
     } catch (e) {
       setError(
@@ -241,7 +253,12 @@ export function WizardScreen({
     }
   }
 
-  const canNext = step === 0 ? count >= (pair ? 2 : 1) : step === 2 ? consent && !sending : true
+  const canNext =
+    step === 0
+      ? count >= (pair ? 2 : 1)
+      : step === 2
+        ? consent && !sending && (session.status !== 'user' || !short)
+        : true
 
   return (
     <div className="mx-auto grid max-w-xl gap-6 px-4 pt-4 md:px-6">
@@ -412,12 +429,21 @@ export function WizardScreen({
                           : []),
                         ['Ожидание', target.eta],
                       ]
-                  ).map(([k, v]) => (
-                    <div key={k} className="flex justify-between py-3">
-                      <dt className="text-ink-muted">{k}</dt>
-                      <dd className="text-ink">{v}</dd>
-                    </div>
-                  ))}
+                  )
+                    .concat(
+                      cost !== undefined
+                        ? [
+                            ['Стоимость', `${cost} токенов`],
+                            ['Ваш баланс', `${balance} токенов`],
+                          ]
+                        : [],
+                    )
+                    .map(([k, v]) => (
+                      <div key={k} className="flex justify-between py-3">
+                        <dt className="text-ink-muted">{k}</dt>
+                        <dd className="text-ink">{v}</dd>
+                      </div>
+                    ))}
                 </dl>
               </div>
               <Checkbox
@@ -444,13 +470,38 @@ export function WizardScreen({
         </Alert>
       ) : null}
 
+      {step === 2 && session.status === 'guest' ? (
+        <Alert tone="info" title="Нужен вход">
+          Создавать фотосессии и видео можно после входа. Новым пользователям — бонусные токены.
+        </Alert>
+      ) : null}
+      {step === 2 && session.status === 'user' && short ? (
+        <div className="grid gap-2">
+          <Alert tone="danger" title="Не хватает токенов">
+            Нужно {cost}, на балансе {balance}. Пополните баланс или пригласите друга — за каждого
+            начисляются токены.
+          </Alert>
+          <StudioButton variant="outline" onClick={onWallet}>
+            Пополнить баланс
+          </StudioButton>
+        </div>
+      ) : null}
+
       <ActionBar>
         <StudioButton
           arrow={!sending}
           disabled={!canNext}
           onClick={() => (step === 2 ? void submit() : setStep(step + 1))}
         >
-          {sending ? 'Отправляем…' : step === 2 ? 'Создать' : 'Дальше'}
+          {sending
+            ? 'Отправляем…'
+            : step < 2
+              ? 'Дальше'
+              : session.status === 'guest'
+                ? 'Войти и создать'
+                : cost
+                  ? `Создать · ${cost} токенов`
+                  : 'Создать'}
         </StudioButton>
         <StudioButton
           variant="quiet"
@@ -475,23 +526,27 @@ const statusTitle: Record<Job['status'], string> = {
   expired: 'Срок хранения истёк',
 }
 
-function useJob(local: LocalJob | undefined) {
+function useJob(id: string) {
   const [job, setJob] = useState<Job>()
   const [error, setError] = useState<string>()
+  const [missing, setMissing] = useState(false)
 
   useEffect(() => {
-    if (!local) return
     let alive = true
     let timer = 0
     async function poll() {
       try {
-        const next = await getJob(local!)
+        const next = await getJob(id)
         if (!alive) return
         setJob(next)
         setError(undefined)
         if (!finalStatuses.includes(next.status)) timer = window.setTimeout(poll, 3_000)
       } catch (e) {
         if (!alive) return
+        if (e instanceof ApiError && (e.status === 404 || e.status === 401)) {
+          setMissing(true)
+          return
+        }
         setError(e instanceof ApiError ? e.message : 'Нет связи с сервером')
         timer = window.setTimeout(poll, 6_000)
       }
@@ -501,9 +556,9 @@ function useJob(local: LocalJob | undefined) {
       alive = false
       window.clearTimeout(timer)
     }
-  }, [local])
+  }, [id])
 
-  return { job, setJob, error }
+  return { job, setJob, error, missing }
 }
 
 export function JobScreen({
@@ -517,15 +572,14 @@ export function JobScreen({
   onRetry: (kind: JobKind, target: string) => void
   onCabinet: () => void
 }) {
-  const [local] = useState(() => localJob(jobId))
-  const { job, setJob, error } = useJob(local)
+  const { job, setJob, error, missing } = useJob(jobId)
   const [cancelling, setCancelling] = useState(false)
 
-  if (!local) {
+  if (missing) {
     return (
       <div className="mx-auto grid max-w-xl gap-6 px-4 pt-8 md:px-6">
-        <Alert tone="danger" title="Задача не найдена на этом устройстве">
-          Задачи привязаны к браузеру, в котором их создали. Откройте ссылку там или создайте новую.
+        <Alert tone="danger" title="Задача не найдена">
+          Войдите в аккаунт, в котором создавали задачу, или откройте список своих задач в кабинете.
         </Alert>
         <StudioButton variant="outline" onClick={onCabinet}>
           В кабинет
@@ -534,14 +588,13 @@ export function JobScreen({
     )
   }
 
-  const meta = describe(local.kind, local.target)
+  const meta = job ? describe(job.kind, job.target) : undefined
   const title = meta?.title ?? 'Задача'
 
   async function cancel() {
-    if (!local) return
     setCancelling(true)
     try {
-      setJob(await cancelJob(local))
+      setJob(await cancelJob(jobId))
     } finally {
       setCancelling(false)
     }
@@ -673,7 +726,7 @@ export function JobScreen({
                 {job.status === 'queued'
                   ? `Перед вами задач: ${Math.max(job.position - 1, 0)}. `
                   : null}
-                Можно закрыть страницу — задача сохранится в кабинете этого браузера.
+                Можно закрыть страницу — задача сохранится в кабинете.
               </p>
               <p className="text-caption text-ink-muted inline-flex items-center justify-center gap-2">
                 <Clock size={14} aria-hidden="true" /> {title}
@@ -697,7 +750,7 @@ export function JobScreen({
                 {job.error ?? 'Попробуйте ещё раз.'}
               </Alert>
             ) : null}
-            <StudioButton onClick={() => onRetry(local.kind, local.target)}>
+            <StudioButton onClick={() => onRetry(job.kind, job.target)}>
               <span className="inline-flex items-center gap-2">
                 <RotateCcw size={16} aria-hidden="true" /> Создать заново
               </span>
@@ -714,89 +767,277 @@ export function JobScreen({
 
 /* ───────────── Кабинет ───────────── */
 
+const reasonTitle: Record<string, string> = {
+  signup: 'Бонус за регистрацию',
+  invitee: 'Бонус по приглашению',
+  daily: 'Бесплатные токены на сегодня',
+  referral: 'Награда за друга',
+  job: 'Списание',
+  refund: 'Возврат',
+  admin: 'Начисление',
+  purchase: 'Покупка',
+}
+
+interface WalletRow {
+  id: number
+  delta: number
+  reason: string
+  note?: string
+  createdAt: number
+}
+
+interface Tariff {
+  id: string
+  title: string
+  tokens: number
+  price: number
+  badge?: string
+}
+
+const dateTime = (ts: number) =>
+  new Date(ts).toLocaleString('ru-RU', {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+
 export function CabinetScreen({
   describe,
   onOpen,
   onCatalog,
+  onLogin,
+  onAdmin,
 }: {
   describe: (kind: JobKind, target: string) => { title: string; cover: string } | undefined
   onOpen: (id: string) => void
   onCatalog: () => void
+  onLogin: () => void
+  onAdmin: () => void
 }) {
-  const [jobs] = useState(() => localJobs())
-  const [statuses, setStatuses] = useState<Record<string, Job['status']>>({})
+  const session = useSession()
+  const me = session.me
+  const [jobs, setJobs] = useState<Job[]>()
+  const [history, setHistory] = useState<WalletRow[]>([])
+  const [tariffs, setTariffs] = useState<Tariff[]>([])
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
-    let alive = true
-    for (const local of jobs.slice(0, 20)) {
-      getJob(local)
-        .then((job) => {
-          if (alive) setStatuses((s) => ({ ...s, [local.id]: job.status }))
-        })
-        .catch(() => undefined)
+    fetch('/api/tariffs')
+      .then((r) => r.json() as Promise<{ tariffs: Tariff[] }>)
+      .then((d) => setTariffs(d.tariffs))
+      .catch(() => setTariffs([]))
+  }, [])
+
+  useEffect(() => {
+    if (session.status !== 'user') return
+    listJobs()
+      .then(setJobs)
+      .catch(() => setJobs([]))
+    fetch('/api/wallet', { cache: 'no-store' })
+      .then((r) => r.json() as Promise<{ history: WalletRow[] }>)
+      .then((d) => setHistory(d.history ?? []))
+      .catch(() => setHistory([]))
+  }, [session.status])
+
+  if (session.status === 'loading') {
+    return (
+      <div className="grid min-h-64 place-items-center">
+        <IrisLoader size={48} label="Загружаем кабинет" />
+      </div>
+    )
+  }
+
+  if (!me) {
+    return (
+      <div className="mx-auto grid max-w-xl gap-6 px-4 pt-8 pb-16 md:px-6">
+        <div className="grid gap-2">
+          <Label>Кабинет</Label>
+          <h1 className="font-display text-title text-ink text-[2rem]">Войдите в аккаунт</h1>
+          <p className="text-body text-ink-muted">
+            В кабинете — баланс токенов, ваши фотосессии и видео, приглашения для друзей.
+          </p>
+        </div>
+        <StudioButton arrow onClick={onLogin}>
+          Войти или зарегистрироваться
+        </StudioButton>
+      </div>
+    )
+  }
+
+  async function share() {
+    if (!me) return
+    const text =
+      'Фотосессии и видео с собой в главной роли — попробуй, по ссылке будут бонусные токены'
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: 'AI Creative Studio', text, url: me.referralUrl })
+        return
+      }
+      await navigator.clipboard.writeText(me.referralUrl)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // пользователь закрыл окно «Поделиться»
     }
-    return () => {
-      alive = false
-    }
-  }, [jobs])
+  }
 
   return (
-    <div className="mx-auto grid max-w-xl gap-6 px-4 pt-6 md:px-6">
-      <div className="grid gap-2">
-        <Label>Кабинет</Label>
-        <h1 className="font-display text-title text-ink text-[2rem]">Мои задачи</h1>
-        <p className="text-caption text-ink-muted">
-          Задачи этого браузера. Вход и общая история появятся позже.
-        </p>
-      </div>
-      {jobs.length === 0 ? (
-        <div className="grid gap-4">
-          <p className="text-body text-ink-muted">Пока ничего не создано.</p>
-          <StudioButton arrow onClick={onCatalog}>
-            Выбрать сценарий
+    <div className="mx-auto grid max-w-3xl gap-8 px-4 pt-6 pb-16 md:px-6">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="grid gap-2">
+          <Label>Кабинет</Label>
+          <h1 className="font-display text-title text-ink text-[2rem]">{me.user.name}</h1>
+          <p className="text-caption text-ink-muted">
+            {me.user.email ??
+              (me.user.providers.length ? `Вход: ${me.user.providers.join(', ')}` : '')}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          {me.user.role === 'admin' ? (
+            <StudioButton variant="outline" onClick={onAdmin}>
+              Админка
+            </StudioButton>
+          ) : null}
+          <StudioButton variant="quiet" onClick={() => void session.logout()}>
+            Выйти
           </StudioButton>
         </div>
-      ) : (
-        <ul className="grid gap-2">
-          {jobs.map((j) => {
-            const meta = describe(j.kind, j.target)
-            const status = statuses[j.id]
-            return (
-              <li key={j.id}>
-                <button
-                  type="button"
-                  onClick={() => onOpen(j.id)}
-                  className="chamfer-sm bg-canvas-raised hover:bg-canvas-overlay flex min-h-16 w-full items-center gap-3 p-2 text-left transition-colors duration-[140ms]"
-                >
-                  {meta ? (
-                    <img src={meta.cover} alt="" className="chamfer-sm size-12 object-cover" />
-                  ) : null}
-                  <span className="grid flex-1 gap-0.5">
-                    <span className="text-ink">{meta?.title ?? j.target}</span>
-                    <span className="text-caption text-ink-muted">
-                      {j.kind === 'video' ? 'Видео' : 'Фото'} ·{' '}
-                      {new Date(j.createdAt).toLocaleString('ru-RU', {
-                        day: 'numeric',
-                        month: 'short',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
+      </div>
+
+      <section className="chamfer ticks grain bg-canvas-raised grid gap-4 p-5 md:grid-cols-[1fr_auto] md:items-center">
+        <div className="grid gap-1">
+          <span className="text-caption tracking-label text-ink-muted uppercase">Баланс</span>
+          <span className="font-display text-ink text-4xl tabular-nums">
+            {me.user.balance} <span className="text-accent text-xl">токенов</span>
+          </span>
+          <span className="text-caption text-ink-muted">
+            Фотосессия — {me.prices.photo}, видео — {me.prices.video}, оживление —{' '}
+            {me.prices.animate5}–{me.prices.animate10}. При нулевом балансе каждый день —{' '}
+            {me.bonuses.daily} бесплатно.
+          </span>
+        </div>
+        <StudioButton arrow onClick={onCatalog}>
+          Создать
+        </StudioButton>
+      </section>
+
+      <section className="grid gap-3">
+        <Label>Пригласить друга</Label>
+        <p className="text-body text-ink-muted">
+          Друг получит {me.bonuses.invitee} токенов при регистрации, а вы — {me.bonuses.referrer},
+          когда он создаст первую работу.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <code className="chamfer-sm bg-canvas-sunken text-ink min-h-11 flex-1 truncate px-4 py-3 text-sm">
+            {me.referralUrl}
+          </code>
+          <StudioButton variant="outline" onClick={() => void share()}>
+            {copied ? 'Скопировано' : 'Поделиться'}
+          </StudioButton>
+        </div>
+      </section>
+
+      {tariffs.length ? (
+        <section className="grid gap-3">
+          <Label>Пополнить баланс</Label>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {tariffs.map((t) => (
+              <div key={t.id} className="chamfer-sm bg-canvas-raised grid gap-2 p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-display text-ink text-lg">{t.title}</span>
+                  {t.badge ? (
+                    <span className="text-caption bg-accent-fill text-accent-ink px-2 py-0.5">
+                      {t.badge}
                     </span>
-                  </span>
-                  <span
-                    className={cn(
-                      'text-caption tracking-label px-2 uppercase',
-                      status === 'done' ? 'text-success' : 'text-ink-muted',
-                    )}
+                  ) : null}
+                </div>
+                <span className="text-ink text-2xl tabular-nums">{t.tokens} токенов</span>
+                <span className="text-ink-muted">{t.price.toLocaleString('ru-RU')} ₽</span>
+                <StudioButton variant="outline" disabled>
+                  Оплата скоро
+                </StudioButton>
+              </div>
+            ))}
+          </div>
+          <p className="text-caption text-ink-muted">
+            Онлайн-оплата подключается. Пока баланс пополняется по приглашениям, ежедневным бонусам
+            и администратором.
+          </p>
+        </section>
+      ) : null}
+
+      <section className="grid gap-3">
+        <Label>Мои работы</Label>
+        {jobs === undefined ? (
+          <IrisLoader size={32} label="Загружаем задачи" />
+        ) : jobs.length === 0 ? (
+          <div className="grid gap-3">
+            <p className="text-body text-ink-muted">Пока ничего не создано.</p>
+            <StudioButton variant="outline" onClick={onCatalog}>
+              Выбрать сюжет
+            </StudioButton>
+          </div>
+        ) : (
+          <ul className="grid gap-2">
+            {jobs.map((j) => {
+              const meta = describe(j.kind, j.target)
+              return (
+                <li key={j.id}>
+                  <button
+                    type="button"
+                    onClick={() => onOpen(j.id)}
+                    className="chamfer-sm bg-canvas-raised hover:bg-canvas-overlay flex min-h-16 w-full items-center gap-3 p-2 text-left transition-colors duration-[140ms]"
                   >
-                    {status ? statusTitle[status] : '…'}
-                  </span>
-                </button>
+                    {meta ? (
+                      <img src={meta.cover} alt="" className="chamfer-sm size-12 object-cover" />
+                    ) : null}
+                    <span className="grid flex-1 gap-0.5">
+                      <span className="text-ink">{meta?.title ?? j.target}</span>
+                      <span className="text-caption text-ink-muted">
+                        {j.kind === 'photo' ? 'Фото' : 'Видео'} · {dateTime(j.createdAt)}
+                        {j.cost ? ` · ${j.cost} ток.` : ''}
+                      </span>
+                    </span>
+                    <span
+                      className={cn(
+                        'text-caption tracking-label px-2 uppercase',
+                        j.status === 'done' ? 'text-success' : 'text-ink-muted',
+                      )}
+                    >
+                      {statusTitle[j.status]}
+                    </span>
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </section>
+
+      {history.length ? (
+        <section className="grid gap-3">
+          <Label>История токенов</Label>
+          <ul className="divide-line border-line grid divide-y border-y">
+            {history.map((h) => (
+              <li key={h.id} className="flex items-center justify-between gap-3 py-3">
+                <span className="grid">
+                  <span className="text-ink">{h.note ?? reasonTitle[h.reason] ?? h.reason}</span>
+                  <span className="text-caption text-ink-muted">{dateTime(h.createdAt)}</span>
+                </span>
+                <span
+                  className={cn(
+                    'font-display tabular-nums',
+                    h.delta > 0 ? 'text-success' : 'text-ink-muted',
+                  )}
+                >
+                  {h.delta > 0 ? `+${h.delta}` : h.delta}
+                </span>
               </li>
-            )
-          })}
-        </ul>
-      )}
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </div>
   )
 }

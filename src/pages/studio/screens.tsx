@@ -1,4 +1,5 @@
-import { Film, ScanFace, Sparkles } from 'lucide-react'
+import { Coins, Film, Gift, ScanFace, Share2, Sparkles } from 'lucide-react'
+import { videoTemplates } from '@/features/catalog/video-data.ts'
 import { AnimatePresence, motion } from 'motion/react'
 import { useMemo, useState } from 'react'
 import { ApertureTabs } from '@/components/studio/aperture-tabs.tsx'
@@ -75,12 +76,19 @@ export function HomeScreen({
   onOpen,
   onCatalog,
   onVideo,
+  onOpenVideo,
 }: {
   onOpen: (id: string) => void
   onCatalog: () => void
   onVideo: () => void
+  onOpenVideo: (id: string) => void
 }) {
   const media = useMedia()
+  // Видеосюжеты с готовыми роликами: сначала тренды и пары.
+  const videos = videoTemplates
+    .filter((v) => media.videos[v.id])
+    .sort((a, b) => Number(b.category === 'trend') - Number(a.category === 'trend'))
+    .slice(0, 8)
   // Популярное: трендовые сюжеты, у которых уже есть образцы.
   const popular = photoStories
     .map((story, i) => toScenario(story, media.photoStories[story.id], i))
@@ -172,14 +180,81 @@ export function HomeScreen({
         </ol>
       </section>
 
+      {videos.length ? (
+        <section className="grid gap-5">
+          <div className="flex items-end justify-between gap-4 px-4 md:px-6">
+            <div>
+              <Label>Видеосюжеты</Label>
+              <h2 className="font-display text-title text-ink mt-2">Вы в главной роли</h2>
+            </div>
+            <StudioButton variant="quiet" onClick={onVideo}>
+              Все сюжеты
+            </StudioButton>
+          </div>
+          <div className="hide-scroll flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 md:grid md:grid-cols-4 md:overflow-visible md:px-6">
+            {videos.map((v, i) => (
+              <PosterCard
+                key={v.id}
+                index={i}
+                title={v.title}
+                tag={v.people === 2 ? 'Вдвоём' : 'Видео'}
+                frames={4}
+                unit="сцены"
+                src={media.videos[v.id]?.poster ?? v.cover}
+                video={media.videos[v.id]?.preview}
+                onOpen={() => onOpenVideo(v.id)}
+                className="w-[58%] shrink-0 snap-start md:w-auto"
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      <section className="grid gap-4 px-4 md:grid-cols-3 md:px-6">
+        {[
+          [
+            Gift,
+            'Бонус при регистрации',
+            'Новым пользователям — токены на первые фотосессии. Вход через почту, Яндекс, VK или Telegram.',
+          ],
+          [
+            Coins,
+            'Бесплатно каждый день',
+            'Если токены закончились, каждый день на баланс приходят бесплатные — снова можно творить.',
+          ],
+          [
+            Share2,
+            'Приглашайте друзей',
+            'Поделитесь своей ссылкой из кабинета: другу — бонус сразу, вам — когда он создаст первую работу.',
+          ],
+        ].map(([Icon, title, text]) => {
+          const I = Icon as typeof Gift
+          return (
+            <div
+              key={String(title)}
+              className="chamfer ticks bg-canvas-raised grid content-start gap-3 p-5"
+            >
+              <span className="bg-accent-fill text-accent-ink chamfer-sm grid size-11 place-items-center">
+                <I size={20} aria-hidden="true" />
+              </span>
+              <h3 className="font-display text-ink text-lg">{String(title)}</h3>
+              <p className="text-body text-ink-muted">{String(text)}</p>
+            </div>
+          )
+        })}
+      </section>
+
       <section className="px-4 md:px-6">
-        <div className="chamfer ticks bg-canvas-overlay border-line grid gap-3 border p-6">
-          <span className="text-caption tracking-label text-accent uppercase">Скоро</span>
-          <h2 className="font-display text-title text-ink">Видеосценарии</h2>
-          <p className="text-body text-ink-muted">
-            Ролик из сцен с раскадровкой: салон, лицо, улица, финал. Уже в каталоге, запуск
-            откроется позже.
-          </p>
+        <div className="chamfer grain bg-canvas-overlay grid gap-4 p-6 md:grid-cols-[1fr_auto] md:items-center">
+          <div className="grid gap-2">
+            <h2 className="font-display text-title text-ink">Начните со своей первой съёмки</h2>
+            <p className="text-body text-ink-muted">
+              Выберите сюжет, загрузите фото — через несколько минут кадры готовы.
+            </p>
+          </div>
+          <StudioButton arrow onClick={onCatalog}>
+            Выбрать фотосессию
+          </StudioButton>
         </div>
       </section>
     </div>

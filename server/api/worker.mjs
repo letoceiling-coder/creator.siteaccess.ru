@@ -45,7 +45,7 @@ async function withRetry(fn, attempts = 2) {
   throw last
 }
 
-export function startWorker({ q, config, log }) {
+export function startWorker({ q, config, log, onFinish = () => {} }) {
   let busy = false
 
   q.requeueRunning.run()
@@ -315,6 +315,15 @@ export function startWorker({ q, config, log }) {
     return results
   }
 
+  /** Возврат токенов и бонусы не должны ронять воркер. */
+  function safeFinish(job, status) {
+    try {
+      onFinish(job, status)
+    } catch (error) {
+      log(`итог задачи ${job.id.slice(0, 8)}: ${error.message}`)
+    }
+  }
+
   async function runJob(job) {
     busy = true
     const started = now()
@@ -329,11 +338,13 @@ export function startWorker({ q, config, log }) {
       const make = job.kind === 'video' ? videoJob : job.kind === 'animate' ? animateJob : photoJob
       const results = await make(job, plan, out)
       q.finish.run('done', null, now(), JSON.stringify(results), job.id)
+      safeFinish(job, 'done')
       log(`задача ${job.id.slice(0, 8)} готова за ${Math.round((now() - started) / 1000)} с`)
     } catch (error) {
       if (error instanceof Cancelled) {
         rmSync(out, { recursive: true, force: true })
         q.finish.run('cancelled', null, now(), '[]', job.id)
+        safeFinish(job, 'cancelled')
         log(`задача ${job.id.slice(0, 8)} отменена`)
       } else {
         rmSync(out, { recursive: true, force: true })
@@ -344,6 +355,7 @@ export function startWorker({ q, config, log }) {
           '[]',
           job.id,
         )
+        safeFinish(job, 'failed')
         log(`задача ${job.id.slice(0, 8)} ошибка: ${error.message}`)
       }
     } finally {

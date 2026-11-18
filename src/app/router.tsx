@@ -8,12 +8,18 @@ import {
   CreatePage,
   HomePage,
   JobPage,
+  LoginPage,
+  TelegramAuthPage,
   ScenarioPage,
   VideoCreatePage,
   VideoItemPage,
   VideoPage,
 } from '@/pages/studio/routes.tsx'
 import { ShellPage } from '@/pages/shell-page.tsx'
+
+const AdminPage = lazy(() =>
+  import('@/pages/admin/admin-page.tsx').then((module) => ({ default: module.AdminPage })),
+)
 
 const FoundationPage = lazy(() =>
   import('@/pages/foundation-page.tsx').then((module) => ({
@@ -34,6 +40,7 @@ const tails = [
   ['/video/:id', VideoItemPage],
   ['/video/:id/create', VideoCreatePage],
   ['/cabinet', CabinetPage],
+  ['/login', LoginPage],
 ] as const
 
 export function AppRoutes() {
@@ -45,6 +52,8 @@ export function AppRoutes() {
             <Route key={base + tail} path={base + tail || '/'} element={<Page />} />
           )),
         )}
+        <Route path="/auth/telegram" element={<TelegramAuthPage />} />
+        <Route path="/admin" element={<AdminPage />} />
         <Route path="/dev/shell" element={<ShellPage />} />
         <Route path="/dev/foundation" element={<FoundationPage />} />
         <Route path="*" element={<ShellPage unknown />} />
