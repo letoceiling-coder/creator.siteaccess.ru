@@ -24,7 +24,7 @@ import {
 
 const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,24}$/
 
-export function authRoutes({ accounts, config, log, ipOf, payments }) {
+export function authRoutes({ accounts, config, log, ipOf, payments, bots }) {
   // Защита от перебора паролей и массовой регистрации (значения можно поднять для тестов).
   const loginLimit = rateLimiter(config.loginLimit ?? 10, 15 * 60_000)
   const registerLimit = rateLimiter(config.registerLimit ?? 5, 60 * 60_000)
@@ -67,8 +67,12 @@ export function authRoutes({ accounts, config, log, ipOf, payments }) {
       if (ready('yandex'))
         out.push({ id: 'yandex', title: 'Яндекс', url: '/api/auth/yandex/start' })
       if (ready('vk')) out.push({ id: 'vk', title: 'VK ID', url: '/api/auth/vk/start' })
-      if (ready('telegram'))
+      // Telegram и MAX — вход через бота с подтверждением кнопкой в мессенджере.
+      if (bots?.linkReady('telegram'))
+        out.push({ id: 'telegram', title: 'Telegram', url: 'link:telegram' })
+      else if (ready('telegram'))
         out.push({ id: 'telegram', title: 'Telegram', url: '/api/auth/telegram/start' })
+      if (bots?.linkReady('max')) out.push({ id: 'max', title: 'MAX', url: 'link:max' })
       return send(res, 200, {
         providers: out,
         webapp: { telegram: Boolean(ready('telegram')), max: Boolean(ready('max')) },

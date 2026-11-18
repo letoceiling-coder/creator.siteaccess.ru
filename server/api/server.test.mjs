@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict'
 import { execFileSync, spawn } from 'node:child_process'
 import { createServer } from 'node:http'
-import { createHmac } from 'node:crypto'
+import { createHash, createHmac } from 'node:crypto'
 import { once } from 'node:events'
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -30,7 +30,7 @@ const env = {
 let child
 
 /* ── Поддельные ЮKassa и Т-Банк: настоящие платёжные API в тестах не вызываются ── */
-const fake = { yk: new Map(), tb: new Map(), ykAmountOverride: undefined }
+const fake = { yk: new Map(), tb: new Map(), ykAmountOverride: undefined, max: [] }
 const fakePort = 4400 + Math.floor(Math.random() * 500)
 const fakeServer = createServer(async (req, res) => {
   let raw = ''
@@ -76,10 +76,26 @@ const fakeServer = createServer(async (req, res) => {
     const p = fake.tb.get(String(body.PaymentId))
     return reply({ Success: true, PaymentId: body.PaymentId, ...p })
   }
+  if (req.url === '/max/me')
+    return reply({ user_id: 1, username: 'studio_max_bot', name: 'Studio' })
+  if (req.url === '/max/subscriptions') {
+    if (req.method === 'POST') {
+      fake.maxSubs = [{ url: body.url, update_types: body.update_types }]
+      assert.match(body.secret, /^[a-f0-9]{48}$/)
+      return reply({ success: true })
+    }
+    return reply({ subscriptions: fake.maxSubs ?? [] })
+  }
+  if (req.url?.startsWith('/max/messages') || req.url?.startsWith('/max/answers')) {
+    assert.equal(req.headers.authorization, 'max-test-token')
+    fake.max.push({ url: req.url, body })
+    return reply({ success: true })
+  }
   reply({ error: 'not found' }, 404)
 })
 env.YOOKASSA_URL = `http://127.0.0.1:${fakePort}/yk`
 env.TBANK_URL = `http://127.0.0.1:${fakePort}/tb`
+env.MAX_API_URL = `http://127.0.0.1:${fakePort}/max`
 
 before(async () => {
   await new Promise((resolve) => fakeServer.listen(fakePort, '127.0.0.1', resolve))
@@ -120,20 +136,23 @@ after(async () => {
 
 /** Клиент с cookie сессии. */
 function client() {
-  let cookie = ''
+  const jar = new Map()
   return async (path, { method = 'GET', json, body, headers = {} } = {}) => {
     const res = await fetch(`${base}${path}`, {
       method,
       headers: {
-        ...(cookie ? { cookie } : {}),
+        ...(jar.size ? { cookie: [...jar].map(([k, v]) => `${k}=${v}`).join('; ') } : {}),
         ...(json ? { 'content-type': 'application/json' } : {}),
         ...headers,
       },
       body: json ? JSON.stringify(json) : body,
       redirect: 'manual',
     })
-    const set = res.headers.get('set-cookie')
-    if (set) cookie = set.split(';')[0]
+    for (const set of res.headers.getSetCookie()) {
+      const [pair] = set.split(';')
+      const i = pair.indexOf('=')
+      jar.set(pair.slice(0, i), pair.slice(i + 1))
+    }
     const text = await res.text()
     let data
     try {
@@ -426,4 +445,64 @@ test('оплата Т-Банк: подпись уведомления, сумм�
   assert.equal(await ok.text(), 'OK')
   await hook({ ...notice, Token: tbankToken(notice, 'pw') })
   assert.equal((await call('/api/me')).data.user.balance, 330)
+})
+
+test('вход на сайте через бота MAX: подтверждение кнопкой, сессия только у этого браузера', async () => {
+  const adm = await admin()
+  await adm('/api/admin/integrations', {
+    method: 'PUT',
+    json: { max: { enabled: true, botToken: 'max-test-token', botUsername: 'studio_max_bot' } },
+  })
+  // До настройки вебхука кнопки входа через MAX нет.
+  let providers = (await client()('/api/auth/providers')).data.providers
+  assert.ok(!providers.some((p) => p.id === 'max'))
+  const setup = await adm('/api/admin/bots/max/setup', { method: 'POST' })
+  assert.equal(setup.status, 200, JSON.stringify(setup.data))
+  assert.equal(setup.data.status.webhookOk, true)
+  providers = (await client()('/api/auth/providers')).data.providers
+  assert.ok(providers.some((p) => p.id === 'max' && p.url === 'link:max'))
+
+  const browser = client()
+  const start = await browser('/api/auth/link/start', { method: 'POST', json: { platform: 'max' } })
+  assert.equal(start.status, 201)
+  const { code, url } = start.data
+  assert.equal(url, `https://max.ru/studio_max_bot?start=login_${code}`)
+  assert.equal((await browser(`/api/auth/link/${code}`)).data.status, 'pending')
+
+  const secret = createHash('sha256')
+    .update('creator-webhook:max-test-token')
+    .digest('hex')
+    .slice(0, 48)
+  const hook = (body, key = secret) =>
+    fetch(`${base}/api/bots/max/webhook`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-max-bot-api-secret': key },
+      body: JSON.stringify(body),
+    })
+  assert.equal((await hook({ update_type: 'bot_started' }, 'wrong-secret')).status, 403)
+
+  const user = { user_id: 4242, first_name: 'Макс', last_name: 'Тест', name: 'Макс Тест' }
+  await hook({ update_type: 'bot_started', user, payload: `login_${code}` })
+  await new Promise((r) => setTimeout(r, 300))
+  const ask = fake.max.at(-1)
+  assert.match(ask.url, /^\/max\/messages\?user_id=4242/)
+  const button = ask.body.attachments[0].payload.buttons[0][0]
+  assert.equal(button.type, 'callback')
+  assert.equal(button.payload, `confirm_login:${code}`)
+
+  await hook({
+    update_type: 'message_callback',
+    callback: { callback_id: 'cb1', payload: `confirm_login:${code}`, user },
+  })
+  await new Promise((r) => setTimeout(r, 300))
+  assert.match(fake.max.at(-1).url, /^\/max\/answers\?callback_id=cb1/)
+
+  // Чужой браузер с тем же кодом сессию не получает.
+  assert.equal((await client()(`/api/auth/link/${code}`)).status, 404)
+  const done = await browser(`/api/auth/link/${code}`)
+  assert.equal(done.data.status, 'confirmed')
+  const me = await browser('/api/me')
+  assert.equal(me.data.user.name, 'Макс Тест')
+  assert.deepEqual(me.data.user.providers, ['max'])
+  assert.equal((await browser(`/api/auth/link/${code}`)).data.status, 'used')
 })

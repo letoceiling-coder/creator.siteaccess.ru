@@ -1,4 +1,5 @@
 import { bindHostBack, emptyInsets, readInsets } from './host.ts'
+import { initDataFromHash } from './load-sdk.ts'
 import type { MaxHost, PlatformAdapter, TelegramHost } from './types.ts'
 
 interface AdapterInput {
@@ -36,7 +37,8 @@ export function createTelegramAdapter(input: AdapterInput): PlatformAdapter {
       host?.close()
     },
     bindBack: (handler) => bindHostBack(host?.BackButton, handler),
-    getInitData: () => host?.initData || undefined,
+    getInitData: () =>
+      host?.initData || initDataFromHash('telegram', globalThis.location?.hash ?? ''),
   }
 }
 
@@ -54,6 +56,6 @@ export function createMaxAdapter(input: AdapterInput): PlatformAdapter {
       host?.close()
     },
     bindBack: (handler) => bindHostBack(host?.BackButton, handler),
-    getInitData: () => host?.initData || undefined,
+    getInitData: () => host?.initData || initDataFromHash('max', globalThis.location?.hash ?? ''),
   }
 }

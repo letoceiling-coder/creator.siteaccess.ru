@@ -551,6 +551,132 @@ function Help({ steps, links }: { steps: ReactNode[]; links?: [string, string][]
   )
 }
 
+/* ── состояние ботов ── */
+
+interface BotsStatus {
+  telegram: {
+    error?: string
+    username?: string
+    webhookOk?: boolean
+    lastError?: string
+    menuButton?: string
+    miniAppOk?: boolean
+  }
+  max: {
+    error?: string
+    username?: string
+    name?: string
+    webhookOk?: boolean
+    otherSubscriptions?: string[]
+  }
+}
+
+function Flag({ ok, label }: { ok?: boolean; label: string }) {
+  return (
+    <li className="flex items-center gap-2">
+      <span
+        className={cn(
+          'grid size-5 place-items-center text-xs',
+          ok ? 'bg-success text-white' : 'bg-danger text-white',
+        )}
+        aria-hidden="true"
+      >
+        {ok ? '✓' : '!'}
+      </span>
+      <span className="text-ink">{label}</span>
+    </li>
+  )
+}
+
+function BotPanel({ platform }: { platform: 'telegram' | 'max' }) {
+  const [status, setStatus] = useState<BotsStatus>()
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState<{ error?: string; ok?: string }>({})
+
+  const load = useCallback(() => {
+    api<BotsStatus>('/api/admin/bots/status')
+      .then(setStatus)
+      .catch((e: unknown) => setMessage({ error: e instanceof Error ? e.message : 'Ошибка' }))
+  }, [])
+  useEffect(load, [load])
+
+  async function setup() {
+    const current = status?.[platform]
+    if (
+      platform === 'max' &&
+      status?.max.otherSubscriptions?.length &&
+      !window.confirm(
+        `У этого бота уже есть вебхуки других сайтов: ${status.max.otherSubscriptions.join(', ')}. ` +
+          'После подключения сообщения боту будут приходить и им, и студии — оба сервиса будут отвечать. ' +
+          'Лучше создать для студии отдельного бота. Всё равно подключить?',
+      )
+    )
+      return
+    void current
+    setBusy(true)
+    setMessage({})
+    try {
+      await api(`/api/admin/bots/${platform}/setup`, { method: 'POST' })
+      setMessage({ ok: 'Бот настроен' })
+      load()
+    } catch (e) {
+      setMessage({ error: e instanceof Error ? e.message : 'Ошибка' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const s = status?.[platform]
+  return (
+    <div className="bg-canvas-sunken grid gap-3 p-4">
+      <span className="text-ink font-medium">Состояние бота</span>
+      {!s ? (
+        <IrisLoader size={24} label="Проверяем бота" />
+      ) : s.error ? (
+        <p className="text-caption text-danger">{s.error}</p>
+      ) : platform === 'telegram' ? (
+        <ul className="text-body grid gap-1">
+          <Flag ok label={`Бот @${status!.telegram.username}`} />
+          <Flag
+            ok={status!.telegram.webhookOk}
+            label="Вебхук на студию (ответы на /start, вход через бота)"
+          />
+          <Flag ok={status!.telegram.miniAppOk} label="Кнопка мини-приложения в чате с ботом" />
+          {status!.telegram.lastError ? (
+            <li className="text-caption text-danger">
+              Последняя ошибка вебхука: {status!.telegram.lastError}
+            </li>
+          ) : null}
+        </ul>
+      ) : (
+        <ul className="text-body grid gap-1">
+          <Flag ok label={`Бот @${status!.max.username} («${status!.max.name}»)`} />
+          <Flag ok={status!.max.webhookOk} label="Вебхук на студию (ответы, вход через бота)" />
+          {status!.max.otherSubscriptions?.length ? (
+            <li className="text-caption text-danger">
+              У бота есть вебхуки других сайтов: {status!.max.otherSubscriptions.join(', ')}. Для
+              студии лучше отдельный бот.
+            </li>
+          ) : null}
+        </ul>
+      )}
+      <div className="flex flex-wrap gap-2">
+        <StudioButton
+          variant="outline"
+          disabled={busy || !s || Boolean(s.error)}
+          onClick={() => void setup()}
+        >
+          {busy ? 'Настраиваем…' : 'Настроить бота'}
+        </StudioButton>
+        <StudioButton variant="quiet" onClick={load}>
+          Проверить
+        </StudioButton>
+      </div>
+      <Notice {...message} />
+    </div>
+  )
+}
+
 function IntegrationsPanel() {
   const { data, error } = useLoad<{ integrations: Integrations }>('/api/admin/integrations')
   const [draft, setDraft] = useState<Record<string, Record<string, string | boolean>>>({})
@@ -677,27 +803,31 @@ function IntegrationsPanel() {
       {card(
         'telegram',
         'Telegram',
-        <div className="grid gap-3 sm:grid-cols-2">
-          <TextField
-            id="telegram-botUsername"
-            label="Имя бота (без @)"
-            value={String(value('telegram', 'botUsername', current.telegram.botUsername))}
-            onChange={(e) => set('telegram', 'botUsername', e.target.value)}
-          />
-          {secretField('telegram', 'botToken', 'Токен бота', current.telegram.botToken)}
+        <div className="grid gap-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <TextField
+              id="telegram-botUsername"
+              label="Имя бота (без @)"
+              value={String(value('telegram', 'botUsername', current.telegram.botUsername))}
+              onChange={(e) => set('telegram', 'botUsername', e.target.value)}
+            />
+            {secretField('telegram', 'botToken', 'Токен бота', current.telegram.botToken)}
+          </div>
+          <BotPanel platform="telegram" />
         </div>,
         <Help
           steps={[
             'В Telegram откройте @BotFather, команда /newbot — получите токен бота.',
+            'Вставьте имя бота и токен сюда, включите и сохраните.',
             <>
-              Для входа на сайте: /setdomain → выберите бота →{' '}
-              <CopyLine value={new URL(origin).host} />
-            </>,
-            <>
-              Для мини-приложения: Bot Settings → Menu Button (или /newapp) → адрес{' '}
+              Нажмите «Настроить бота»: студия сама поставит вебхук и кнопку мини-приложения{' '}
               <CopyLine value={`${origin}/telegram`} />
             </>,
-            'Вставьте имя бота и токен сюда, включите и сохраните. Подпись данных входа проверяется токеном на сервере.',
+            'На сайте «Войти через Telegram» откроет бота; пользователь нажмёт «Подтвердить вход» — браузер войдёт сам. Внутри мини-приложения вход автоматический.',
+            <>
+              Для ссылок вида t.me/бот?startapp (необязательно): в @BotFather → Bot Settings →
+              Configure Mini App укажите тот же адрес.
+            </>,
           ]}
           links={[
             ['@BotFather', 'https://t.me/BotFather'],
@@ -708,17 +838,21 @@ function IntegrationsPanel() {
       {card(
         'max',
         'MAX',
-        <div className="grid gap-3 sm:grid-cols-2">
-          {secretField('max', 'botToken', 'Токен бота MAX', current.max.botToken)}
+        <div className="grid gap-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            {secretField('max', 'botToken', 'Токен бота MAX', current.max.botToken)}
+          </div>
+          <BotPanel platform="max" />
         </div>,
         <Help
           steps={[
-            'Зарегистрируйте организацию на платформе для партнёров MAX и создайте бота — получите токен.',
+            'Зарегистрируйте организацию на платформе для партнёров MAX и создайте отдельного бота для студии — получите токен.',
             <>
               В настройках мини-приложения бота укажите адрес <CopyLine value={`${origin}/max`} />
             </>,
-            'Вставьте токен сюда, включите и сохраните. Вход происходит сам, когда пользователь открывает мини-приложение в MAX.',
-            'Отдельной кнопки «Войти через MAX» на сайте нет: MAX подтверждает пользователя внутри мини-приложения.',
+            'Вставьте токен сюда, включите и сохраните, затем нажмите «Настроить бота» — студия подпишется на события бота (вебхук с секретом).',
+            'На сайте появится «Войти через MAX»: пользователь откроет бота, нажмёт «Подтвердить вход» — и браузер войдёт сам. Внутри мини-приложения вход происходит автоматически.',
+            'Если у бота уже есть вебхуки других сайтов, сообщения будут приходить всем — поэтому для студии нужен свой бот.',
           ]}
           links={[['Платформа MAX для партнёров', 'https://dev.max.ru/']]}
         />,

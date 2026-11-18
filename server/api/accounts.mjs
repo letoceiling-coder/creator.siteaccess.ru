@@ -15,7 +15,7 @@ export const defaults = {
     yandex: { enabled: false, clientId: '', clientSecret: '' },
     vk: { enabled: false, clientId: '', clientSecret: '' },
     telegram: { enabled: false, botUsername: '', botToken: '' },
-    max: { enabled: false, botToken: '' },
+    max: { enabled: false, botToken: '', botUsername: '' },
   },
   /** Оплата тарифов. Чеки (54-ФЗ): taxation — код системы налогообложения ЮKassa (1–6), vat — код НДС (1 — без НДС). */
   payments: {

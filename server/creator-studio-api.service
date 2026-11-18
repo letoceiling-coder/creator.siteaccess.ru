@@ -11,6 +11,8 @@ Restart=on-failure
 RestartSec=5
 Environment=NODE_ENV=production
 Environment=DOCKER_CONFIG=/var/lib/creator-studio/docker
+# Telegram API с сервера доступен только через tor (HTTP-туннель).
+Environment=TELEGRAM_PROXY=http://127.0.0.1:8118
 Nice=5
 
 # Пишет только в свои каталоги и во вход/выход ComfyUI.

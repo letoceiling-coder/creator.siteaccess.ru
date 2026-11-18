@@ -2,6 +2,7 @@
 import { HttpError, readJson, send } from './http.mjs'
 
 const SECRET_KEYS = ['clientSecret', 'botToken', 'secretKey', 'password']
+const HIDDEN_KEYS = ['webhookFor']
 const mask = (v) => (v ? `••••${String(v).slice(-4)}` : '')
 
 const int = (v, min, max, name) => {
@@ -11,7 +12,7 @@ const int = (v, min, max, name) => {
   return n
 }
 
-export function adminRoutes({ accounts, db, q, log, payments }) {
+export function adminRoutes({ accounts, db, q, log, payments, bots }) {
   const st = {
     stats: db.prepare(`SELECT
       (SELECT COUNT(*) FROM users) AS users,
@@ -60,8 +61,10 @@ export function adminRoutes({ accounts, db, q, log, payments }) {
     const out = {}
     for (const [p, cfg] of Object.entries(all)) {
       out[p] = {}
-      for (const [k, v] of Object.entries(cfg))
+      for (const [k, v] of Object.entries(cfg)) {
+        if (HIDDEN_KEYS.includes(k)) continue
         out[p][k] = SECRET_KEYS.includes(k) ? { set: Boolean(v), hint: mask(v) } : v
+      }
     }
     return out
   }
@@ -246,6 +249,35 @@ export function adminRoutes({ accounts, db, q, log, payments }) {
         accounts.setSetting('payments', current)
         log(`админ ${user.id.slice(0, 8)}: изменены настройки оплаты`)
         return send(res, 200, { payments: integrationsView('payments') })
+      }
+    }
+
+    if (method === 'GET' && path === '/api/admin/bots/status') {
+      const safe = async (fn) => {
+        try {
+          return await fn()
+        } catch (error) {
+          return { error: error.message }
+        }
+      }
+      const cfg = accounts.getSetting('integrations')
+      return send(res, 200, {
+        telegram: cfg.telegram.botToken
+          ? await safe(bots.admin.telegramStatus)
+          : { error: 'Не задан токен' },
+        max: cfg.max.botToken ? await safe(bots.admin.maxStatus) : { error: 'Не задан токен' },
+      })
+    }
+
+    const setup = /^\/api\/admin\/bots\/(telegram|max)\/setup$/.exec(path)
+    if (method === 'POST' && setup) {
+      try {
+        const status =
+          setup[1] === 'telegram' ? await bots.admin.telegramSetup() : await bots.admin.maxSetup()
+        log(`админ ${user.id.slice(0, 8)}: настроен бот ${setup[1]}`)
+        return send(res, 200, { status })
+      } catch (error) {
+        throw new HttpError(502, error.message)
       }
     }
 

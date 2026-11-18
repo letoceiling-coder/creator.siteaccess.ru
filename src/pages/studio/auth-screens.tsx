@@ -1,11 +1,13 @@
-import { LogIn, Mail } from 'lucide-react'
+import { ChevronRight, Mail } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
 import { ApertureTabs } from '@/components/studio/aperture-tabs.tsx'
 import { IrisLoader } from '@/components/studio/iris-loader.tsx'
 import { StudioButton } from '@/components/studio/studio-button.tsx'
 import { Alert } from '@/components/ui/alert.tsx'
 import { TextField } from '@/components/ui/text-field.tsx'
-import { ApiError } from '@/features/auth/http.ts'
+import { BrandIcon } from '@/components/studio/brand-icons.tsx'
+import { ApiError, apiFetch, jsonInit } from '@/features/auth/http.ts'
+import { cn } from '@/shared/cn.ts'
 import {
   fetchProviders,
   login,
@@ -17,10 +19,111 @@ import {
 
 type Provider = { id: string; title: string; url: string }
 
-const providerStyle: Record<string, string> = {
-  yandex: 'bg-[#fc3f1d] text-white',
-  vk: 'bg-[#0077ff] text-white',
-  telegram: 'bg-[#229ed9] text-white',
+/** Ожидание подтверждения входа в боте (Telegram, MAX). */
+function BotLogin({
+  provider,
+  onDone,
+  onCancel,
+}: {
+  provider: Provider
+  onDone: () => void
+  onCancel: () => void
+}) {
+  const { refresh } = useSession()
+  const [link, setLink] = useState<{ code: string; url: string }>()
+  const [status, setStatus] = useState<'starting' | 'pending' | 'expired' | 'error'>('starting')
+  const [error, setError] = useState<string>()
+  const platform = provider.url.slice(5)
+
+  useEffect(() => {
+    let alive = true
+    let timer = 0
+    async function poll(code: string, tries: number) {
+      try {
+        const res = await apiFetch(`/api/auth/link/${code}`, { cache: 'no-store' })
+        const body = (await res.json()) as { status?: string }
+        if (!alive) return
+        if (body.status === 'confirmed') {
+          await refresh()
+          onDone()
+          return
+        }
+        if (body.status === 'expired' || body.status === 'used' || tries > 150) {
+          setStatus('expired')
+          return
+        }
+      } catch {
+        // сеть — пробуем дальше
+      }
+      timer = window.setTimeout(() => void poll(code, tries + 1), 2000)
+    }
+    void (async () => {
+      try {
+        const res = await apiFetch('/api/auth/link/start', jsonInit('POST', { platform }))
+        const body = (await res.json()) as { code?: string; url?: string; error?: string }
+        if (!res.ok || !body.code || !body.url)
+          throw new Error(body.error ?? 'Не удалось начать вход')
+        if (!alive) return
+        setLink({ code: body.code, url: body.url })
+        setStatus('pending')
+        window.open(body.url, '_blank', 'noopener')
+        void poll(body.code, 0)
+      } catch (e) {
+        if (!alive) return
+        setError(e instanceof Error ? e.message : 'Не удалось начать вход')
+        setStatus('error')
+      }
+    })()
+    return () => {
+      alive = false
+      window.clearTimeout(timer)
+    }
+  }, [platform, refresh, onDone])
+
+  return (
+    <div className="chamfer bg-canvas-raised grid gap-4 p-5">
+      <div className="flex items-center gap-3">
+        <BrandIcon id={provider.id} />
+        <span className="font-display text-ink text-lg">Вход через {provider.title}</span>
+      </div>
+      {status === 'error' ? (
+        <Alert tone="danger" title="Не получилось">
+          {error}
+        </Alert>
+      ) : status === 'expired' ? (
+        <Alert tone="info" title="Время вышло">
+          Подтверждение не пришло. Нажмите «Войти через {provider.title}» ещё раз.
+        </Alert>
+      ) : (
+        <>
+          <ol className="text-body text-ink-muted grid list-decimal gap-1 pl-5">
+            <li>Откроется бот студии в {provider.title}.</li>
+            <li>Нажмите в нём «Запустить» и затем «Подтвердить вход».</li>
+            <li>Вернитесь сюда — вход произойдёт сам.</li>
+          </ol>
+          <div className="flex flex-wrap items-center gap-3">
+            <IrisLoader size={28} label="Ждём подтверждения" />
+            <span className="text-caption text-ink-muted">
+              Ждём подтверждения в {provider.title}…
+            </span>
+          </div>
+          {link ? (
+            <a
+              href={link.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="chamfer-sm bg-canvas-overlay text-ink inline-flex min-h-11 items-center justify-center px-4 font-medium"
+            >
+              Открыть бота ещё раз
+            </a>
+          ) : null}
+        </>
+      )}
+      <StudioButton variant="quiet" onClick={onCancel}>
+        Другой способ входа
+      </StudioButton>
+    </div>
+  )
 }
 
 /** Вход и регистрация: почта или быстрый вход через Яндекс, VK ID, Telegram. */
@@ -61,6 +164,7 @@ export function LoginScreen({
     }
   }
 
+  const [botProvider, setBotProvider] = useState<Provider>()
   const ref = savedRef()
   const startUrl = (p: Provider) => {
     const q = new URLSearchParams({ return: returnTo })
@@ -79,17 +183,51 @@ export function LoginScreen({
         </p>
       </div>
 
-      {providers.length ? (
+      {botProvider ? (
+        <BotLogin
+          provider={botProvider}
+          onDone={onDone}
+          onCancel={() => setBotProvider(undefined)}
+        />
+      ) : providers.length ? (
         <div className="grid gap-2">
-          {providers.map((p) => (
-            <a
-              key={p.id}
-              href={startUrl(p)}
-              className={`chamfer-sm inline-flex min-h-12 items-center justify-center gap-2 font-medium ${providerStyle[p.id] ?? 'bg-canvas-raised text-ink'}`}
-            >
-              <LogIn size={18} aria-hidden="true" /> Войти через {p.title}
-            </a>
-          ))}
+          <div className={cn('grid gap-2', providers.length > 1 && 'sm:grid-cols-2')}>
+            {providers.map((p, i) => {
+              // При нечётном числе способов последний занимает всю ширину — без пустой ячейки.
+              const wide = providers.length % 2 === 1 && i === providers.length - 1
+              const className = cn(
+                'chamfer-sm bg-canvas-raised hover:bg-canvas-overlay text-ink transition-studio flex min-h-12 w-full items-center gap-3 px-4 text-left font-medium',
+                wide && 'sm:col-span-2',
+              )
+              const content = (
+                <>
+                  <BrandIcon id={p.id} />
+                  <span className="flex-1">{p.title}</span>
+                  <ChevronRight size={18} className="text-ink-muted" aria-hidden="true" />
+                </>
+              )
+              return p.url.startsWith('link:') ? (
+                <button
+                  key={p.id}
+                  type="button"
+                  className={className}
+                  aria-label={`Войти через ${p.title}`}
+                  onClick={() => setBotProvider(p)}
+                >
+                  {content}
+                </button>
+              ) : (
+                <a
+                  key={p.id}
+                  href={startUrl(p)}
+                  className={className}
+                  aria-label={`Войти через ${p.title}`}
+                >
+                  {content}
+                </a>
+              )
+            })}
+          </div>
           <p className="text-caption text-ink-muted text-center">или по почте</p>
         </div>
       ) : null}
