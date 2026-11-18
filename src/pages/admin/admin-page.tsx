@@ -2,6 +2,7 @@ import { Check, Copy, Shield } from 'lucide-react'
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { ApertureTabs } from '@/components/studio/aperture-tabs.tsx'
 import { IrisLoader } from '@/components/studio/iris-loader.tsx'
+import { MediaLightbox } from '@/components/studio/media-lightbox.tsx'
 import { StudioButton } from '@/components/studio/studio-button.tsx'
 import { Alert } from '@/components/ui/alert.tsx'
 import { Checkbox } from '@/components/ui/checkbox.tsx'
@@ -1771,6 +1772,7 @@ function AutopostDraft({
   const [text, setText] = useState(item.text)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
+  const [view, setView] = useState<number>()
   const editable = item.status === 'draft'
 
   async function act(path: string, init: RequestInit, ask?: string) {
@@ -1808,27 +1810,40 @@ function AutopostDraft({
       </span>
       {item.media.length ? (
         <ul className="grid grid-cols-4 gap-1 sm:max-w-md">
-          {item.media.map((m) =>
-            m.kind === 'video' ? (
-              <li key={m.src} className="col-span-2 row-span-2">
-                <video
-                  src={m.src}
-                  poster={m.thumb}
-                  controls
-                  playsInline
-                  className="aspect-[9/16] w-full object-cover"
+          {item.media.map((m, i) => (
+            <li key={m.src} className={m.kind === 'video' ? 'col-span-2 row-span-2' : undefined}>
+              <button
+                type="button"
+                onClick={() => setView(i)}
+                aria-label={`Открыть ${m.kind === 'video' ? 'видео' : `фото ${i + 1}`} на весь экран`}
+                className="group relative block w-full overflow-hidden"
+              >
+                <img
+                  src={m.thumb}
+                  alt=""
+                  className={cn(
+                    'w-full object-cover transition-transform duration-[220ms] group-hover:scale-[1.03]',
+                    m.kind === 'video' ? 'aspect-[9/16]' : 'aspect-[3/4]',
+                  )}
                 />
-              </li>
-            ) : (
-              <li key={m.src}>
-                <a href={m.src} target="_blank" rel="noreferrer">
-                  <img src={m.thumb} alt="" className="aspect-[3/4] w-full object-cover" />
-                </a>
-              </li>
-            ),
-          )}
+                {m.kind === 'video' ? (
+                  <span className="absolute inset-0 grid place-items-center">
+                    <span className="grid size-12 place-items-center rounded-full bg-black/55 text-xl text-white">
+                      ▶
+                    </span>
+                  </span>
+                ) : null}
+              </button>
+            </li>
+          ))}
         </ul>
       ) : null}
+      <MediaLightbox
+        items={item.media.map((m) => ({ kind: m.kind, src: m.src, poster: m.thumb }))}
+        index={view}
+        onIndex={setView}
+        label={`${item.storyTitle}: просмотр`}
+      />
       {editable ? (
         <textarea
           aria-label="Текст черновика"

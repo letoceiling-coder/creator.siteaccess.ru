@@ -30,6 +30,7 @@ import { camera, directShots, lighting } from './directing.mjs'
 import { HttpError, readJson, send } from './http.mjs'
 import { toJpeg, toWebp } from './images.mjs'
 import { faceVisible, negative } from './presets.mjs'
+import { FEMININE_WEAR, genderClause, genderNegative, storyGender } from './gender.mjs'
 
 const TEST_IMAGE = process.env.AUTOPOST_TEST_IMAGE ?? ''
 const KEEP_MEDIA_MS = 30 * 86_400_000
@@ -85,18 +86,25 @@ const sizes = {
   '16:9': { still: [1664, 928], video: [832, 480] },
   '1:1': { still: [1328, 1328], video: [640, 640] },
 }
+/** Вымышленные герои; пол героя определяет его образ (см. gender.mjs). */
 const cast = [
-  'a young woman with long dark hair',
-  'a man in his early 30s with short dark hair and light stubble',
-  'a woman in her late 20s with wavy auburn hair and freckles',
-  'a woman in her 30s with a sleek blonde bob',
-  'a young man with curly brown hair',
-  'a woman in her 40s with elegant shoulder-length chestnut hair',
-  'a young woman of East Asian appearance with straight black hair',
-  'a man in his 40s with salt-and-pepper hair and a neat beard',
-  'a young woman with dark skin and long braids',
-  'a young woman with platinum blonde long hair',
-]
+  ['a young woman with long dark hair', 'female'],
+  ['a man in his early 30s with short dark hair and light stubble', 'male'],
+  ['a woman in her late 20s with wavy auburn hair and freckles', 'female'],
+  ['a woman in her 30s with a sleek blonde bob', 'female'],
+  ['a young man with curly brown hair', 'male'],
+  ['a woman in her 40s with elegant shoulder-length chestnut hair', 'female'],
+  ['a young woman of East Asian appearance with straight black hair', 'female'],
+  ['a man in his 40s with salt-and-pepper hair and a neat beard', 'male'],
+  ['a young woman with dark skin and long braids', 'female'],
+  ['a young woman with platinum blonde long hair', 'female'],
+].map(([who, gender]) => ({ who, gender }))
+
+/** Герой под сюжет: для «женских» и «мужских» сюжетов — только подходящего пола. */
+function pickHero(story) {
+  const need = storyGender(story)
+  return pick(need === 'any' ? cast : cast.filter((c) => c.gender === need))
+}
 /** Ошибка для админки: без трассировок (старые записи могли сохранить ответ ComfyUI целиком). */
 function shortError(message) {
   if (/OutOfMemory|out of memory/i.test(message)) return 'Не хватило видеопамяти GPU'
@@ -209,19 +217,19 @@ export function autopostModule({ db, accounts, config, log, q, channels, llm }) 
 
   const mediaUrl = (id, file) => `/media/autopost/${id}/${file}`
 
-  async function makePhotos(id, story, dir, step, look) {
+  async function makePhotos(id, story, dir, step, look, hero) {
     if (TEST_IMAGE) {
       for (let i = 0; i < 4; i++) copyFileSync(TEST_IMAGE, join(dir, `${i}.jpg`))
       return [0, 1, 2, 3].map((i) => ({ kind: 'photo', file: `${i}.jpg`, thumb: `${i}.jpg` }))
     }
     const [prop, , move, mood] = story.props
-    const who = pick(cast)
+    const { who, gender } = hero
     step('Обложка фотосессии')
     const cover = await withFace(async () => {
       const files = await runWorkflow(
         qwenImageWorkflow({
-          prompt: `Editorial medium-full shot, 35mm lens, the location is clearly visible around the person. Subject: ${who}${look ? `, ${look}` : ''}, with ${prop}, ${move}, expression ${mood}. Location: ${story.scene}. Light: ${lighting.day}. Palette: ${story.palette}. ${faceVisible} ${style}`,
-          negative,
+          prompt: `Editorial medium-full shot, 35mm lens, the location is clearly visible around the person. Subject: ${who}${look ? `, ${look}` : ''}, with ${prop}, ${move}, expression ${mood}. ${genderClause(gender)} Location: ${story.scene}. Light: ${lighting.day}. Palette: ${story.palette}. ${faceVisible} ${style}`,
+          negative: `${negative}, ${genderNegative(gender)}`,
           width: 1104,
           height: 1472,
           seed: seed(),
@@ -241,7 +249,7 @@ export function autopostModule({ db, accounts, config, log, q, channels, llm }) 
           qwenEditWorkflow({
             images: [ref],
             prompt: `${shot.camera}. Subject: the person from the reference photo, ${shot.pose}. Location: ${story.scene}. Light: ${lighting.day}. Palette: ${story.palette}. ${faceVisible} Keep the face and identity exactly the same as in the reference, do not copy its pose or framing. ${style}`,
-            negative,
+            negative: `${negative}, ${genderNegative(gender)}`,
             seed: seed(),
             width: 1104,
             height: 1472,
@@ -286,17 +294,17 @@ export function autopostModule({ db, accounts, config, log, q, channels, llm }) 
     return best.path
   }
 
-  async function makeVideo(id, story, dir, step, look) {
+  async function makeVideo(id, story, dir, step, look, hero) {
     const sz = sizes[story.ratio]
     const start = pick([0, 2].filter((i) => story.beats[i + 1]))
     const beats = [story.beats[start], story.beats[start + 1]]
-    const who = pick(cast)
+    const { who, gender } = hero
     step('Первый кадр ролика')
     const still1 = await withFace(async () => {
       const files = await runWorkflow(
         qwenImageWorkflow({
-          prompt: `Cinematic film still: ${beats[0].still}. Subject: ${who}${look ? `, ${look}` : ''}. ${faceVisible} ${videoStyle}`,
-          negative,
+          prompt: `Cinematic film still: ${beats[0].still}. Subject: ${who}${look ? `, ${look}` : ''}. ${genderClause(gender)} ${faceVisible} ${videoStyle}`,
+          negative: `${negative}, ${genderNegative(gender)}`,
           width: sz.still[0],
           height: sz.still[1],
           seed: seed(),
@@ -316,7 +324,7 @@ export function autopostModule({ db, accounts, config, log, q, channels, llm }) 
         qwenEditWorkflow({
           images: [ref],
           prompt: `Cinematic film still: ${beats[1].still}. Subject: the person from the reference photo. ${faceVisible} Keep the face and identity exactly the same as in the reference, do not copy its pose or framing. ${videoStyle}`,
-          negative,
+          negative: `${negative}, ${genderNegative(gender)}`,
           seed: seed(),
           width: sz.still[0],
           height: sz.still[1],
@@ -352,11 +360,11 @@ export function autopostModule({ db, accounts, config, log, q, channels, llm }) 
    * Сценарий поста от языковой модели: текст анонса и «образ» героя для генерации
    * (одежда и стиль, по-английски). Модель не меняет сюжет — только раскрывает его.
    */
-  async function writePlan(kind, story, cfg) {
+  async function writePlan(kind, story, cfg, hero) {
     const about =
       kind === 'photo'
-        ? `Фотосессия «${story.title}» (категория «${categoryName[story.category] ?? story.category}»). Сцена: ${story.scene}. Реквизит и настроение: ${story.props.join(', ')}. В посте 4 кадра одного вымышленного героя.`
-        : `Видеосюжет «${story.title}»: ${story.blurb} Сцены: ${story.beats.map((b) => b.ru).join(', ')}. Жанр музыки: ${story.genre}, настроение: ${story.mood}. В посте короткий ролик около 10 секунд.`
+        ? `Фотосессия «${story.title}» (категория «${categoryName[story.category] ?? story.category}»). Сцена: ${story.scene}. Реквизит и настроение: ${story.props.join(', ')}. В посте 4 кадра одного вымышленного героя: ${hero.gender === 'male' ? 'это мужчина' : 'это женщина'}.`
+        : `Видеосюжет «${story.title}»: ${story.blurb} Сцены: ${story.beats.map((b) => b.ru).join(', ')}. Жанр музыки: ${story.genre}, настроение: ${story.mood}. В посте короткий ролик около 10 секунд, в главной роли ${hero.gender === 'male' ? 'мужчина' : 'женщина'}.`
     try {
       const { data: out, model } = await llm.chat(
         [
@@ -373,7 +381,7 @@ export function autopostModule({ db, accounts, config, log, q, channels, llm }) 
 - title: 2–5 слов, образное название сюжета, в конце одно эмодзи;
 - body: 1–2 предложения до 260 символов о том, что в кадре и какое настроение; ровно один ключевой фрагмент выдели **жирным**;
 - cta: одна строка, начинается с эмодзи (📸 для фото, 🎥 для видео), зовёт создать такую же ${kind === 'photo' ? 'фотосессию' : 'видео'} со своим лицом и заканчивается словами «жми на кнопку ниже↓»;
-- look: по-английски, до 25 слов — одежда, причёска и стилинг героя под этот сюжет (без описания лица, возраста и тела, без наготы).`,
+- look: по-английски, до 25 слов — одежда, причёска и стилинг героя под этот сюжет (без описания лица, возраста и тела, без наготы). Образ строго ${hero.gender === 'male' ? 'мужской: только мужская одежда, никаких платьев, юбок, каблуков, украшений и макияжа' : 'женский'}.\nВ тексте пиши о герое в правильном роде: ${hero.gender === 'male' ? 'он, герой' : 'она, героиня'}.`,
           },
         ],
         { json: true, localModel: cfg.llmModel },
@@ -395,6 +403,8 @@ export function autopostModule({ db, accounts, config, log, q, channels, llm }) 
         .trim()
         .slice(0, 200)
       if (/\b(nude|naked|topless|lingerie|underwear|bikini|sexy|erotic)\b/i.test(look)) look = ''
+      // Образ противоположного пола запрещён: женские вещи у мужчины — образ отбрасывается.
+      if (hero.gender === 'male' && FEMININE_WEAR.test(look)) look = ''
       return {
         text: [title, body, cta].join('\n\n'),
         look,
@@ -467,12 +477,13 @@ export function autopostModule({ db, accounts, config, log, q, channels, llm }) 
     const step = (s) => st.step.run(s, id)
     void (async () => {
       try {
-        const { text, look, model } = await writePlan(kind, story, cfg)
+        const hero = pickHero(story)
+        const { text, look, model } = await writePlan(kind, story, cfg, hero)
         st.model.run(model, id)
         const media =
           kind === 'photo'
-            ? await makePhotos(id, story, dir, step, look)
-            : await makeVideo(id, story, dir, step, look)
+            ? await makePhotos(id, story, dir, step, look, hero)
+            : await makeVideo(id, story, dir, step, look, hero)
         const button = cfg.buttonText
           ? {
               text: cfg.buttonText,

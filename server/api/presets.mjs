@@ -5,6 +5,7 @@
 import { photoStories } from '../factory/photo-stories.mjs'
 import { stories } from '../factory/stories.mjs'
 import { camera, directShots, lighting } from './directing.mjs'
+import { crossDressingNegative, genderFromReference } from './gender.mjs'
 
 /** Сценарии каталога сайта → локации фабрики. Любую локацию можно заказать и по её id. */
 const scenarioToLocation = {
@@ -24,11 +25,9 @@ export const times = {
   night: 'night scene with ambient city or practical lights',
 }
 
-const identity =
-  'This is the exact same person as in the reference photos: keep the face, facial features, skin tone, age and identity unchanged. Take only the identity from the reference: do not copy its pose, framing, clothing or background.'
+const identity = `This is the exact same person as in the reference photos: keep the face, facial features, skin tone, age and identity unchanged. Take only the identity from the reference: do not copy its pose, framing, clothing or background. ${genderFromReference}`
 const style = `${camera}.`
-export const negative =
-  'different person, changed face, distorted face, oversized head, disproportionate body, deformed hands, extra fingers, blurry, text, watermark, logo, cartoon, 3d render, nudity'
+export const negative = `different person, changed face, distorted face, oversized head, disproportionate body, deformed hands, extra fingers, blurry, text, watermark, logo, cartoon, 3d render, nudity, ${crossDressingNegative}`
 
 export function photoPlan(target, options) {
   const locationId = Object.hasOwn(scenarioToLocation, target) ? scenarioToLocation[target] : target
@@ -52,7 +51,7 @@ export const faceVisible =
 const facesVisible =
   'Both faces are clearly visible and turned toward the camera, both heads fully inside the frame with headroom.'
 const identityPair =
-  'These are exactly the two people from the reference photos: the first reference photo is the first person, the second reference photo is the second person. Keep both faces, skin tones, ages and identities unchanged. Take only identities from the references, not poses, clothing or backgrounds.'
+  'These are exactly the two people from the reference photos: the first reference photo is the first person, the second reference photo is the second person. Keep both faces, skin tones, ages and identities unchanged. Take only identities from the references, not poses, clothing or backgrounds. Each person’s clothing and styling match their own gender: a man in men’s clothing, a woman in women’s clothing.'
 
 const sizes = {
   '9:16': { still: [928, 1664], video: [480, 832] },
